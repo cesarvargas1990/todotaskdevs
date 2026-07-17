@@ -54,17 +54,18 @@ function Shell({children}:{children:React.ReactNode}){
 }
 
 function Board(){
-  const [tasks,setTasks]=useState<Task[]>([]), [err,setErr]=useState(''), [dragging,setDragging]=useState<number|null>(null);
+  const [tasks,setTasks]=useState<Task[]>([]), [err,setErr]=useState(''), [dragging,setDragging]=useState<number|null>(null), [blockMove,setBlockMove]=useState<{taskId:number;comment:string}|null>(null);
   const load=()=>api('/tasks').then(setTasks).catch((ex:any)=>setErr(ex.message));
   useEffect(()=>{void load()},[]);
-  async function moveTask(taskId:number,status:Status){
+  async function moveTask(taskId:number,status:Status,comment=''){
     const previous=tasks;
     setTasks(tasks.map(t=>t.id===taskId?{...t,status,updatedAt:new Date().toISOString()}:t));
-    try{await api(`/tasks/${taskId}/status`,{method:'PATCH',body:JSON.stringify({status})});}
+    try{await api(`/tasks/${taskId}/status`,{method:'PATCH',body:JSON.stringify({status,comment})});}
     catch(ex:any){setTasks(previous); setErr(ex.message || 'No se pudo mover la tarea');}
     finally{setDragging(null);}
   }
-  return <section className="board-page"><div className="topline"><h2>Tablero</h2><Link className="primary" to="/new"><Plus/> Nueva tarea</Link></div>{err&&<div className="error">{err}</div>}<div className="kanban">{statuses.map(([s,label])=>{const items=tasks.filter(t=>t.status===s);return <section className={`col ${s} ${dragging?'drop-ready':''}`} key={s} onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault(); const id=Number(e.dataTransfer.getData('text/task-id')); if(id) void moveTask(id,s)}}><h3><span></span>{label}<em>{items.length}</em></h3>{items.map(t=><TaskCard key={t.id} task={t} onDragStart={()=>setDragging(t.id)}/>)}</section>})}</div></section>
+  function dropTask(taskId:number,status:Status){if(status==='BLOCKED') setBlockMove({taskId,comment:''}); else void moveTask(taskId,status)}
+  return <section className="board-page"><div className="topline"><h2>Tablero</h2><Link className="primary" to="/new"><Plus/> Nueva tarea</Link></div>{err&&<div className="error">{err}</div>}<div className="kanban">{statuses.map(([s,label])=>{const items=tasks.filter(t=>t.status===s);return <section className={`col ${s} ${dragging?'drop-ready':''}`} key={s} onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault(); const id=Number(e.dataTransfer.getData('text/task-id')); if(id) dropTask(id,s)}}><h3><span></span>{label}<em>{items.length}</em></h3>{items.map(t=><TaskCard key={t.id} task={t} onDragStart={()=>setDragging(t.id)}/>)}</section>})}</div>{blockMove&&<div className="modal-backdrop"><form className="modal" onSubmit={e=>{e.preventDefault(); if(!blockMove.comment.trim()){setErr('Para bloquear una tarea debes indicar el motivo.'); return;} void moveTask(blockMove.taskId,'BLOCKED',blockMove.comment.trim()); setBlockMove(null);}}><h3>Motivo de bloqueo</h3><textarea autoFocus value={blockMove.comment} onChange={e=>setBlockMove({...blockMove,comment:e.target.value})} placeholder="Describe por qué queda bloqueada"/><div className="actions"><button type="button" className="secondary" onClick={()=>{setBlockMove(null); setDragging(null)}}>Cancelar</button><button type="submit">Bloquear tarea</button></div></form></div>}</section>
 }
 function TaskCard({task,onDragStart}:{task:Task;onDragStart:()=>void}){return <Link className="task-card" to={`/tasks/${task.id}`} draggable onDragStart={e=>{e.dataTransfer.setData('text/task-id',String(task.id)); onDragStart();}}><h4>{task.title}</h4><div className={`chip ${task.status}`}>{statuses.find(s=>s[0]===task.status)?.[1]}</div><p>TT-{String(task.id).padStart(6,'0')}</p><div className="people"><small>Creada por<br/><b>{task.createdBy.name}</b></small><small>Asignada a<br/><b>{task.assignedTo.name}</b></small></div><footer><span><Calendar size={15}/>{new Date(task.createdAt).toLocaleDateString()}</span><span><MessageCircle size={15}/>{task.comments?.length||0}</span><span><Paperclip size={15}/>{task.attachments?.length||0}</span></footer></Link>}
 
@@ -76,28 +77,38 @@ function Editor({value,onChange}:{value:string;onChange:(v:string)=>void}){
   const [editorError,setEditorError]=useState('');
   useEffect(()=>{
     let cancelled=false;
+    let fallbackTimer:number|undefined;
     function loadTinyMce(){
       if((window as any).tinymce) return Promise.resolve();
       return new Promise<void>((resolve,reject)=>{
         const existing=document.querySelector('script[data-tinymce]');
-        if(existing){existing.addEventListener('load',()=>resolve(),{once:true}); return;}
+        if(existing){
+          let checks=0;
+          const interval=window.setInterval(()=>{checks++; if((window as any).tinymce){window.clearInterval(interval); resolve();} if(checks>80){window.clearInterval(interval); reject(new Error('TinyMCE fue descargado pero no quedó disponible en window.tinymce'));}},50);
+          existing.addEventListener('load',()=>resolve(),{once:true});
+          existing.addEventListener('error',()=>reject(new Error('No se pudo cargar TinyMCE')),{once:true});
+          return;
+        }
         const script=document.createElement('script');
         script.src='https://cdn.jsdelivr.net/npm/tinymce@7/tinymce.min.js';
         script.referrerPolicy='origin';
         script.dataset.tinymce='true';
-        script.onload=()=>resolve();
+        script.onload=()=>{if((window as any).tinymce) resolve(); else reject(new Error('TinyMCE descargó, pero no inicializó el global tinymce'));};
         script.onerror=()=>reject(new Error('No se pudo cargar TinyMCE'));
         document.head.appendChild(script);
       });
     }
+    fallbackTimer=window.setTimeout(()=>setEditorError('TinyMCE tardó demasiado en cargar. Puedes escribir HTML en el campo alterno.'),6000);
     loadTinyMce().then(()=>{
       if(cancelled || !textareaRef.current) return;
       const tinymce=(window as any).tinymce;
       tinymce.init({
         target: textareaRef.current,
-        license_key: 'gpl',
+        base_url: 'https://cdn.jsdelivr.net/npm/tinymce@7',
+        suffix: '.min',
         menubar: false,
         branding: false,
+        promotion: false,
         height: 420,
         plugins: 'autolink lists link image table code autoresize paste',
         toolbar: 'undo redo | blocks | bold italic underline | bullist numlist blockquote | alignleft aligncenter alignright | link image table | removeformat code',
@@ -108,18 +119,21 @@ function Editor({value,onChange}:{value:string;onChange:(v:string)=>void}){
         setup: (editor:any) => {
           editorRef.current=editor;
           editor.on('Change KeyUp Paste Drop SetContent',()=>onChange(editor.getContent()));
+          editor.on('init',()=>{if(fallbackTimer) window.clearTimeout(fallbackTimer); setEditorReady(true); setEditorError('');});
         },
         init_instance_callback: (editor:any) => {
           editor.setContent(value || '');
           onChange(editor.getContent());
+          if(fallbackTimer) window.clearTimeout(fallbackTimer);
           setEditorReady(true);
+          setEditorError('');
         },
       });
-    }).catch((error:Error)=>setEditorError(error.message));
-    return()=>{cancelled=true; if(editorRef.current){editorRef.current.remove(); editorRef.current=null;}};
+    }).catch((error:Error)=>{if(fallbackTimer) window.clearTimeout(fallbackTimer); setEditorError(error.message);});
+    return()=>{cancelled=true; if(fallbackTimer) window.clearTimeout(fallbackTimer); if(editorRef.current){editorRef.current.remove(); editorRef.current=null;}};
   },[]);
   useEffect(()=>{if(editorRef.current && value!==editorRef.current.getContent()) editorRef.current.setContent(value || '');},[value]);
-  return <div className="editor tinymce-editor">{!editorReady&&!editorError&&<div className="editor-status">Cargando TinyMCE...</div>}{editorError&&<div className="error">TinyMCE no cargó: {editorError}</div>}<textarea id={idRef.current} ref={textareaRef} defaultValue={value} onChange={e=>onChange(e.target.value)}/></div>
+  return <div className="editor tinymce-editor">{!editorReady&&!editorError&&<div className="editor-status">Cargando TinyMCE...</div>}{editorError&&<div className="error">TinyMCE no cargó: {editorError}</div>}<textarea id={idRef.current} ref={textareaRef} value={value} onChange={e=>onChange(e.target.value)} placeholder="Escribe el detalle de la tarea"/></div>
 }
 
 function TaskForm(){
