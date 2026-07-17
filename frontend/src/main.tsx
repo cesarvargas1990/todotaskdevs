@@ -81,16 +81,20 @@ function Editor({value,onChange}:{value:string;onChange:(v:string)=>void}){
     function loadTinyMce(){
       if((window as any).tinymce) return Promise.resolve();
       return new Promise<void>((resolve,reject)=>{
+        const cdn='https://cdn.jsdelivr.net/npm/tinymce@7/tinymce.min.js';
         const existing=document.querySelector('script[data-tinymce]');
         if(existing){
+          if((existing as HTMLScriptElement).src !== cdn) existing.remove();
+          else {
           let checks=0;
           const interval=window.setInterval(()=>{checks++; if((window as any).tinymce){window.clearInterval(interval); resolve();} if(checks>80){window.clearInterval(interval); reject(new Error('TinyMCE fue descargado pero no quedó disponible en window.tinymce'));}},50);
           existing.addEventListener('load',()=>resolve(),{once:true});
           existing.addEventListener('error',()=>reject(new Error('No se pudo cargar TinyMCE')),{once:true});
           return;
+          }
         }
         const script=document.createElement('script');
-        script.src='https://cdn.jsdelivr.net/npm/tinymce@7/tinymce.min.js';
+        script.src=cdn;
         script.referrerPolicy='origin';
         script.dataset.tinymce='true';
         script.onload=()=>{if((window as any).tinymce) resolve(); else reject(new Error('TinyMCE descargó, pero no inicializó el global tinymce'));};
@@ -106,11 +110,12 @@ function Editor({value,onChange}:{value:string;onChange:(v:string)=>void}){
         target: textareaRef.current,
         base_url: 'https://cdn.jsdelivr.net/npm/tinymce@7',
         suffix: '.min',
+        license_key: 'gpl',
         menubar: false,
         branding: false,
         promotion: false,
         height: 420,
-        plugins: 'autolink lists link image table code autoresize paste',
+        plugins: 'autolink lists link image table code autoresize',
         toolbar: 'undo redo | blocks | bold italic underline | bullist numlist blockquote | alignleft aligncenter alignright | link image table | removeformat code',
         paste_data_images: true,
         automatic_uploads: true,
