@@ -50,7 +50,7 @@ function Shell({children}:{children:React.ReactNode}){
   const [me,setMe]=useState<UserT|null>(null); const nav=useNavigate();
   useEffect(()=>{api('/auth/me').then(setMe).catch(()=>nav('/login'))},[]);
   function out(){localStorage.removeItem('token'); nav('/login')}
-  return <div className="app"><aside className="side"><Link className="logo" to="/"><CheckSquare/> Todo<span>Tasks</span></Link><Link to="/"><LayoutGrid/> Tablero</Link><Link to="/new"><Plus/> Crear tarea</Link><button onClick={out}><LogOut/> Cerrar sesión</button></aside><header><nav><Link to="/"><LayoutGrid/> Tablero</Link><Link to="/new"><Plus/> Crear tarea</Link></nav><div className="profile"><span>{me?.name?.slice(0,2) || 'CV'}</span><b>{me?.name}</b></div></header><main className="content">{children}</main></div>
+  return <div className="app"><aside className="side"><Link className="logo" to="/"><CheckSquare/> Todo<span>Tasks</span></Link><Link to="/"><LayoutGrid/> Tablero</Link><Link to="/new"><Plus/> Crear tarea</Link><button onClick={out}><LogOut/> Cerrar sesión</button></aside><header><Link className="mobile-brand" to="/"><CheckSquare/><strong>Todo<span>Tasks</span></strong></Link><nav><Link to="/"><LayoutGrid/> Tablero</Link><Link to="/new"><Plus/> Crear tarea</Link></nav><div className="profile"><span>{me?.name?.slice(0,2) || 'CV'}</span><b>{me?.name}</b></div></header><main className="content">{children}</main></div>
 }
 
 function Board(){
