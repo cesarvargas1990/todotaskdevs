@@ -2,7 +2,6 @@ import { Module, OnApplicationBootstrap } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { hash } from 'bcryptjs';
 import { Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import { AuthController, JwtStrategy } from './auth';
@@ -16,16 +15,7 @@ class SeedService implements OnApplicationBootstrap {
   constructor(@InjectRepository(User) private readonly users: Repository<User>) {}
 
   async onApplicationBootstrap() {
-    const seeds = [
-      { name: 'Cesar Vargas', email: 'cesara.vargas1990@gmil.com' },
-      { name: 'Hezuri', email: 'hezuri@hotmail.com' },
-    ];
-    for (const seed of seeds) {
-      const exists = await this.users.findOneBy({ email: seed.email });
-      if (!exists) {
-        await this.users.save(this.users.create({ ...seed, passwordHash: await hash('password', 12) }));
-      }
-    }
+    await this.users.count();
   }
 }
 

@@ -11,7 +11,7 @@ import Table from '@tiptap/extension-table';
 import TableRow from '@tiptap/extension-table-row';
 import TableHeader from '@tiptap/extension-table-header';
 import TableCell from '@tiptap/extension-table-cell';
-import { ArrowLeft, Calendar, CheckSquare, FileDown, LayoutGrid, LogOut, MessageCircle, Paperclip, Plus, Save, User, Users } from 'lucide-react';
+import { ArrowLeft, Calendar, CheckSquare, FileDown, LayoutGrid, LogOut, MessageCircle, Paperclip, Plus, Save, User } from 'lucide-react';
 import './styles.css';
 
 const API = import.meta.env.VITE_API_BASE_URL || '/todotaskdev/api';
@@ -42,7 +42,7 @@ function App(){
 }
 
 function Login(){
-  const nav = useNavigate(); const [email,setEmail]=useState('cesara.vargas1990@gmil.com'); const [password,setPassword]=useState('password'); const [err,setErr]=useState('');
+  const nav = useNavigate(); const [email,setEmail]=useState(''); const [password,setPassword]=useState(''); const [err,setErr]=useState('');
   async function submit(e:React.FormEvent){e.preventDefault(); setErr(''); try{const r=await api('/auth/login',{method:'POST',body:JSON.stringify({email,password})}); localStorage.setItem('token',r.accessToken); nav('/');}catch(ex:any){setErr(ex.message)}}
   return <main className="login">
     <section className="brand"><CheckSquare size={58}/><h1>Todo<span>Tasks</span></h1><p>Gestión simple y colaborativa de tareas</p></section>
@@ -51,7 +51,6 @@ function Login(){
       <label>Contraseña<input type="password" value={password} onChange={e=>setPassword(e.target.value)} /></label>
       {err && <div className="error">{err}</div>}<button>Iniciar sesión</button>
     </form>
-    <aside className="test-users"><h3><Users size={20}/> Usuarios de prueba</h3><b>cesara.vargas1990@gmil.com</b><small>Contraseña: password</small><hr/><b>hezuri@hotmail.com</b><small>Contraseña: password</small></aside>
   </main>
 }
 

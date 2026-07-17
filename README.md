@@ -16,11 +16,6 @@ Abrir:
 
 Para producción detrás del dominio solicitado, publica el servicio Nginx y enruta `https://cesarvargas.tech/todotaskdev` hacia este contenedor. La configuración ya usa el prefijo `/todotaskdev` y proxifica la API en `/todotaskdev/api`.
 
-## Usuarios de prueba
-
-- `cesara.vargas1990@gmil.com` / `password`
-- `hezuri@hotmail.com` / `password`
-
 ## Variables principales
 
 Revisar `.env.example`. Cambia `JWT_SECRET` y completa `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` y `SMTP_FROM` si quieres envío real de correos. Si SMTP no está configurado, los eventos se registran en logs y no bloquean la operación.
