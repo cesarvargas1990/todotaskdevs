@@ -1,5 +1,4 @@
 import { Injectable, Logger } from '@nestjs/common';
-import nodemailer = require('nodemailer');
 import { existsSync } from 'fs';
 import { Task } from './entities';
 
@@ -12,15 +11,24 @@ export class MailService {
   private readonly pass = process.env.MAIL_PASSWORD || process.env.SMTP_PASS;
   private readonly fromAddress = process.env.MAIL_FROM_ADDRESS || process.env.SMTP_FROM || this.user;
   private readonly fromName = process.env.MAIL_FROM_NAME || 'TodoTaskDev';
-  private readonly transport = this.host
-    ? nodemailer.createTransport({
+  private readonly transport = this.createTransport();
+
+  private createTransport() {
+    if (!this.host) return null;
+    try {
+      const nodemailer = require('nodemailer') as typeof import('nodemailer');
+      return nodemailer.createTransport({
         host: this.host,
         port: this.port,
         secure: this.port === 465,
         auth: this.user ? { user: this.user, pass: this.pass } : undefined,
         tls: process.env.MAIL_ENCRYPTION === 'tls' ? { rejectUnauthorized: false } : undefined,
-      })
-    : null;
+      });
+    } catch (error) {
+      this.logger.error(`SMTP deshabilitado: ${(error as Error).message}`);
+      return null;
+    }
+  }
 
   async taskEvent(task: Task, subject: string, description: string, comment?: string) {
     const recipients = Array.from(new Set([
