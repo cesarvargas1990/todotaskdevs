@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import createDOMPurify from 'dompurify';
+import * as createDOMPurify from 'dompurify';
 import { JSDOM } from 'jsdom';
 import { existsSync, mkdirSync, unlinkSync } from 'fs';
 import { join } from 'path';
