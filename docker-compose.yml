@@ -30,6 +30,14 @@ services:
       DB_USER: ${MYSQL_USER:-todotasks}
       DB_PASSWORD: ${MYSQL_PASSWORD:-todotasks_password}
       PUBLIC_APP_URL: ${PUBLIC_APP_URL:-https://cesarvargas.tech/todotaskdev}
+      MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:-}
+      MAIL_FROM_NAME: ${MAIL_FROM_NAME:-TodoTaskDev}
+      MAIL_DRIVER: ${MAIL_DRIVER:-smtp}
+      MAIL_HOST: ${MAIL_HOST:-}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      MAIL_ENCRYPTION: ${MAIL_ENCRYPTION:-tls}
       UPLOAD_DIR: /app/uploads
     volumes:
       - uploads_data:/app/uploads

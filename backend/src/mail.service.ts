@@ -1,21 +1,34 @@
 import { Injectable, Logger } from '@nestjs/common';
 import nodemailer from 'nodemailer';
+import { existsSync } from 'fs';
 import { Task } from './entities';
 
 @Injectable()
 export class MailService {
   private readonly logger = new Logger(MailService.name);
-  private readonly transport = process.env.SMTP_HOST
+  private readonly host = process.env.MAIL_HOST || process.env.SMTP_HOST;
+  private readonly port = Number(process.env.MAIL_PORT || process.env.SMTP_PORT || 587);
+  private readonly user = process.env.MAIL_USERNAME || process.env.SMTP_USER;
+  private readonly pass = process.env.MAIL_PASSWORD || process.env.SMTP_PASS;
+  private readonly fromAddress = process.env.MAIL_FROM_ADDRESS || process.env.SMTP_FROM || this.user;
+  private readonly fromName = process.env.MAIL_FROM_NAME || 'TodoTaskDev';
+  private readonly transport = this.host
     ? nodemailer.createTransport({
-        host: process.env.SMTP_HOST,
-        port: Number(process.env.SMTP_PORT || 587),
-        secure: Number(process.env.SMTP_PORT || 587) === 465,
-        auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } : undefined,
+        host: this.host,
+        port: this.port,
+        secure: this.port === 465,
+        auth: this.user ? { user: this.user, pass: this.pass } : undefined,
+        tls: process.env.MAIL_ENCRYPTION === 'tls' ? { rejectUnauthorized: false } : undefined,
       })
     : null;
 
   async taskEvent(task: Task, subject: string, description: string, comment?: string) {
-    const recipients = Array.from(new Set([task.createdBy.email, task.assignedTo.email]));
+    const recipients = Array.from(new Set([
+      task.createdBy?.email,
+      task.assignedTo?.email,
+      ...(task.comments || []).map((item) => item.user?.email),
+      ...(task.history || []).map((item) => item.changedBy?.email),
+    ].filter(Boolean)));
     const link = `${process.env.PUBLIC_APP_URL || 'http://localhost:8080/todotaskdev'}/tasks/${task.id}`;
     const text = [
       description,
@@ -32,7 +45,16 @@ export class MailService {
       return;
     }
     try {
-      await this.transport.sendMail({ from: process.env.SMTP_FROM, to: recipients, subject, text });
+      const attachments = (task.attachments || [])
+        .filter((item) => item.filePath && existsSync(item.filePath))
+        .map((item) => ({ filename: item.originalName, path: item.filePath }));
+      await this.transport.sendMail({
+        from: `"${this.fromName}" <${this.fromAddress}>`,
+        to: recipients,
+        subject,
+        text,
+        attachments,
+      });
     } catch (error) {
       this.logger.error(`No se pudo enviar correo: ${(error as Error).message}`);
     }

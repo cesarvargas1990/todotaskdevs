@@ -83,7 +83,7 @@ export class TasksService {
     if (dto.detailHtml) task.detailHtml = this.sanitize(dto.detailHtml);
     const saved = await this.tasks.save(task);
     if (previousAssigned !== saved.assignedTo.email) {
-      await this.mail.taskEvent(saved, 'Tarea reasignada', `${user.name} reasignó la tarea.`);
+      await this.mail.taskEvent(await this.one(id), 'Tarea reasignada', `${user.name} reasignó la tarea.`);
     }
     return this.one(id);
   }
@@ -98,14 +98,14 @@ export class TasksService {
     task.completedAt = dto.status === TaskStatus.DONE ? new Date() : null;
     const saved = await this.tasks.save(task);
     await this.history.save(this.history.create({ task: saved, previousStatus: previous, newStatus: dto.status, changedBy: user, comment: dto.comment || null }));
-    await this.mail.taskEvent(saved, dto.status === TaskStatus.DONE ? 'Tarea finalizada' : 'Cambio de estado', `${user.name} cambió el estado de la tarea.`, dto.comment);
+    await this.mail.taskEvent(await this.one(id), dto.status === TaskStatus.DONE ? 'Tarea finalizada' : 'Cambio de estado', `${user.name} cambió el estado de la tarea.`, dto.comment);
     return this.one(id);
   }
 
   async addComment(id: number, dto: CommentDto, user: User) {
     const task = await this.one(id);
     const comment = await this.comments.save(this.comments.create({ task, user, content: dto.content.trim() }));
-    await this.mail.taskEvent(task, 'Nuevo comentario', `${user.name} agregó un comentario.`, comment.content);
+    await this.mail.taskEvent(await this.one(id), 'Nuevo comentario', `${user.name} agregó un comentario.`, comment.content);
     return comment;
   }
 
