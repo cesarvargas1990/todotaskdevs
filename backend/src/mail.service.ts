@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import nodemailer from 'nodemailer';
+import nodemailer = require('nodemailer');
 import { existsSync } from 'fs';
 import { Task } from './entities';
 
