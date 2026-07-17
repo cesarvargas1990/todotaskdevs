@@ -43,7 +43,14 @@ export class TasksService {
   }
 
   async one(id: number) {
-    const task = await this.tasks.findOne({ where: { id }, relations: { comments: true, attachments: true, history: true } });
+    const task = await this.tasks.findOne({
+      where: { id },
+      relations: {
+        comments: { user: true },
+        attachments: { uploadedBy: true },
+        history: { changedBy: true },
+      },
+    });
     if (!task) throw new NotFoundException('Tarea no encontrada');
     return task;
   }
