@@ -1,17 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Link, Navigate, Route, Routes, useNavigate, useParams } from 'react-router-dom';
 import DOMPurify from 'dompurify';
-import { useEditor, EditorContent } from '@tiptap/react';
-import StarterKit from '@tiptap/starter-kit';
-import LinkExt from '@tiptap/extension-link';
-import Image from '@tiptap/extension-image';
-import Placeholder from '@tiptap/extension-placeholder';
-import Table from '@tiptap/extension-table';
-import TableRow from '@tiptap/extension-table-row';
-import TableHeader from '@tiptap/extension-table-header';
-import TableCell from '@tiptap/extension-table-cell';
-import { ArrowLeft, Bold, Calendar, CheckSquare, Code, FileDown, Heading1, Heading2, ImageIcon, Italic, LayoutGrid, Link as LinkIcon, List, ListOrdered, LogOut, MessageCircle, Paperclip, Plus, Quote, Redo2, Save, Share2, Table2, Trash2, Undo2, User } from 'lucide-react';
+import { ArrowLeft, Calendar, CheckSquare, FileDown, LayoutGrid, LogOut, MessageCircle, Paperclip, Plus, Save, Share2, User } from 'lucide-react';
 import './styles.css';
 
 const API = import.meta.env.VITE_API_BASE_URL || '/todotaskdev/api';
@@ -78,33 +69,54 @@ function Board(){
 function TaskCard({task,onDragStart}:{task:Task;onDragStart:()=>void}){return <Link className="task-card" to={`/tasks/${task.id}`} draggable onDragStart={e=>{e.dataTransfer.setData('text/task-id',String(task.id)); onDragStart();}}><h4>{task.title}</h4><div className={`chip ${task.status}`}>{statuses.find(s=>s[0]===task.status)?.[1]}</div><p>TT-{String(task.id).padStart(6,'0')}</p><div className="people"><small>Creada por<br/><b>{task.createdBy.name}</b></small><small>Asignada a<br/><b>{task.assignedTo.name}</b></small></div><footer><span><Calendar size={15}/>{new Date(task.createdAt).toLocaleDateString()}</span><span><MessageCircle size={15}/>{task.comments?.length||0}</span><span><Paperclip size={15}/>{task.attachments?.length||0}</span></footer></Link>}
 
 function Editor({value,onChange}:{value:string;onChange:(v:string)=>void}){
-  function insertImageFile(file:File, editor:any){
-    if(!imageTypes.has(file.type)) return false;
-    const reader=new FileReader();
-    reader.onload=()=>editor.chain().focus().setImage({src:String(reader.result)}).run();
-    reader.readAsDataURL(file);
-    return true;
-  }
-  const editor=useEditor({extensions:[StarterKit,LinkExt.configure({openOnClick:false}),Image,Placeholder.configure({placeholder:'Describe la tarea con formato, listas, enlaces, tablas o imágenes...'}),Table.configure({resizable:true}),TableRow,TableHeader,TableCell],content:value,onUpdate:({editor})=>onChange(editor.getHTML()),editorProps:{handlePaste(view,event){const files=Array.from(event.clipboardData?.files||[]); const used=files.some(file=>insertImageFile(file,editor)); if(used){event.preventDefault(); return true;} return false;},handleDrop(view,event){const files=Array.from(event.dataTransfer?.files||[]); const used=files.some(file=>insertImageFile(file,editor)); if(used){event.preventDefault(); return true;} return false;}}});
-  function addLink(){const url=prompt('URL del enlace'); if(url) editor?.chain().focus().extendMarkRange('link').setLink({href:url}).run();}
-  function addImage(){const url=prompt('URL de la imagen'); if(url) editor?.chain().focus().setImage({src:url}).run();}
-  const btn=(label:string, icon:React.ReactNode, action:()=>void, active=false)=><button type="button" title={label} aria-label={label} className={active?'active':''} onClick={action}>{icon}<span>{label}</span></button>;
-  return <div className="editor"><div className="toolbar">
-    {btn('Deshacer',<Undo2 size={17}/>,()=>editor?.chain().focus().undo().run())}
-    {btn('Rehacer',<Redo2 size={17}/>,()=>editor?.chain().focus().redo().run())}
-    {btn('Título 1',<Heading1 size={17}/>,()=>editor?.chain().focus().toggleHeading({level:1}).run(),!!editor?.isActive('heading',{level:1}))}
-    {btn('Título 2',<Heading2 size={17}/>,()=>editor?.chain().focus().toggleHeading({level:2}).run(),!!editor?.isActive('heading',{level:2}))}
-    {btn('Negrita',<Bold size={17}/>,()=>editor?.chain().focus().toggleBold().run(),!!editor?.isActive('bold'))}
-    {btn('Cursiva',<Italic size={17}/>,()=>editor?.chain().focus().toggleItalic().run(),!!editor?.isActive('italic'))}
-    {btn('Lista',<List size={17}/>,()=>editor?.chain().focus().toggleBulletList().run(),!!editor?.isActive('bulletList'))}
-    {btn('Numerada',<ListOrdered size={17}/>,()=>editor?.chain().focus().toggleOrderedList().run(),!!editor?.isActive('orderedList'))}
-    {btn('Cita',<Quote size={17}/>,()=>editor?.chain().focus().toggleBlockquote().run(),!!editor?.isActive('blockquote'))}
-    {btn('Código',<Code size={17}/>,()=>editor?.chain().focus().toggleCodeBlock().run(),!!editor?.isActive('codeBlock'))}
-    {btn('Enlace',<LinkIcon size={17}/>,addLink,!!editor?.isActive('link'))}
-    {btn('Imagen',<ImageIcon size={17}/>,addImage)}
-    {btn('Tabla',<Table2 size={17}/>,()=>editor?.chain().focus().insertTable({rows:3,cols:3,withHeaderRow:true}).run())}
-    {btn('Borrar tabla',<Trash2 size={17}/>,()=>editor?.chain().focus().deleteTable().run())}
-  </div><EditorContent editor={editor}/></div>
+  const textareaRef=useRef<HTMLTextAreaElement|null>(null);
+  const editorRef=useRef<any>(null);
+  const idRef=useRef(`tinymce-${Math.random().toString(36).slice(2)}`);
+  useEffect(()=>{
+    let cancelled=false;
+    function loadTinyMce(){
+      if((window as any).tinymce) return Promise.resolve();
+      return new Promise<void>((resolve,reject)=>{
+        const existing=document.querySelector('script[data-tinymce]');
+        if(existing){existing.addEventListener('load',()=>resolve(),{once:true}); return;}
+        const script=document.createElement('script');
+        script.src='https://cdn.jsdelivr.net/npm/tinymce@7/tinymce.min.js';
+        script.referrerPolicy='origin';
+        script.dataset.tinymce='true';
+        script.onload=()=>resolve();
+        script.onerror=()=>reject(new Error('No se pudo cargar TinyMCE'));
+        document.head.appendChild(script);
+      });
+    }
+    loadTinyMce().then(()=>{
+      if(cancelled || !textareaRef.current) return;
+      const tinymce=(window as any).tinymce;
+      tinymce.init({
+        target: textareaRef.current,
+        license_key: 'gpl',
+        menubar: false,
+        branding: false,
+        height: 420,
+        plugins: 'autolink lists link image table code autoresize paste',
+        toolbar: 'undo redo | blocks | bold italic underline | bullist numlist blockquote | alignleft aligncenter alignright | link image table | removeformat code',
+        paste_data_images: true,
+        automatic_uploads: true,
+        images_upload_handler: (blobInfo:any) => Promise.resolve(`data:${blobInfo.blob().type};base64,${blobInfo.base64()}`),
+        content_style: 'body{font-family:Inter,system-ui,Arial,sans-serif;font-size:15px;line-height:1.55;color:#07133d} img{max-width:100%;height:auto;border-radius:8px} table{border-collapse:collapse;width:100%}td,th{border:1px solid #cbd5e1;padding:8px}th{background:#f2f6fd}',
+        setup: (editor:any) => {
+          editorRef.current=editor;
+          editor.on('Change KeyUp Paste Drop SetContent',()=>onChange(editor.getContent()));
+        },
+        init_instance_callback: (editor:any) => {
+          editor.setContent(value || '');
+          onChange(editor.getContent());
+        },
+      });
+    });
+    return()=>{cancelled=true; if(editorRef.current){editorRef.current.remove(); editorRef.current=null;}};
+  },[]);
+  useEffect(()=>{if(editorRef.current && value!==editorRef.current.getContent()) editorRef.current.setContent(value || '');},[value]);
+  return <div className="editor tinymce-editor"><textarea id={idRef.current} ref={textareaRef} defaultValue={value}/></div>
 }
 
 function TaskForm(){
