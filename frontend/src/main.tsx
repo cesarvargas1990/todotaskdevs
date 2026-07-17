@@ -64,7 +64,7 @@ function Board(){
     catch(ex:any){setTasks(previous); setErr(ex.message || 'No se pudo mover la tarea');}
     finally{setDragging(null);}
   }
-  return <><div className="topline"><h2>Tablero</h2><Link className="primary" to="/new"><Plus/> Nueva tarea</Link></div>{err&&<div className="error">{err}</div>}<div className="kanban">{statuses.map(([s,label])=>{const items=tasks.filter(t=>t.status===s);return <section className={`col ${s} ${dragging?'drop-ready':''}`} key={s} onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault(); const id=Number(e.dataTransfer.getData('text/task-id')); if(id) void moveTask(id,s)}}><h3><span></span>{label}<em>{items.length}</em></h3>{items.map(t=><TaskCard key={t.id} task={t} onDragStart={()=>setDragging(t.id)}/>)}</section>})}</div></>
+  return <section className="board-page"><div className="topline"><h2>Tablero</h2><Link className="primary" to="/new"><Plus/> Nueva tarea</Link></div>{err&&<div className="error">{err}</div>}<div className="kanban">{statuses.map(([s,label])=>{const items=tasks.filter(t=>t.status===s);return <section className={`col ${s} ${dragging?'drop-ready':''}`} key={s} onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault(); const id=Number(e.dataTransfer.getData('text/task-id')); if(id) void moveTask(id,s)}}><h3><span></span>{label}<em>{items.length}</em></h3>{items.map(t=><TaskCard key={t.id} task={t} onDragStart={()=>setDragging(t.id)}/>)}</section>})}</div></section>
 }
 function TaskCard({task,onDragStart}:{task:Task;onDragStart:()=>void}){return <Link className="task-card" to={`/tasks/${task.id}`} draggable onDragStart={e=>{e.dataTransfer.setData('text/task-id',String(task.id)); onDragStart();}}><h4>{task.title}</h4><div className={`chip ${task.status}`}>{statuses.find(s=>s[0]===task.status)?.[1]}</div><p>TT-{String(task.id).padStart(6,'0')}</p><div className="people"><small>Creada por<br/><b>{task.createdBy.name}</b></small><small>Asignada a<br/><b>{task.assignedTo.name}</b></small></div><footer><span><Calendar size={15}/>{new Date(task.createdAt).toLocaleDateString()}</span><span><MessageCircle size={15}/>{task.comments?.length||0}</span><span><Paperclip size={15}/>{task.attachments?.length||0}</span></footer></Link>}
 
@@ -72,6 +72,8 @@ function Editor({value,onChange}:{value:string;onChange:(v:string)=>void}){
   const textareaRef=useRef<HTMLTextAreaElement|null>(null);
   const editorRef=useRef<any>(null);
   const idRef=useRef(`tinymce-${Math.random().toString(36).slice(2)}`);
+  const [editorReady,setEditorReady]=useState(false);
+  const [editorError,setEditorError]=useState('');
   useEffect(()=>{
     let cancelled=false;
     function loadTinyMce(){
@@ -110,13 +112,14 @@ function Editor({value,onChange}:{value:string;onChange:(v:string)=>void}){
         init_instance_callback: (editor:any) => {
           editor.setContent(value || '');
           onChange(editor.getContent());
+          setEditorReady(true);
         },
       });
-    });
+    }).catch((error:Error)=>setEditorError(error.message));
     return()=>{cancelled=true; if(editorRef.current){editorRef.current.remove(); editorRef.current=null;}};
   },[]);
   useEffect(()=>{if(editorRef.current && value!==editorRef.current.getContent()) editorRef.current.setContent(value || '');},[value]);
-  return <div className="editor tinymce-editor"><textarea id={idRef.current} ref={textareaRef} defaultValue={value}/></div>
+  return <div className="editor tinymce-editor">{!editorReady&&!editorError&&<div className="editor-status">Cargando TinyMCE...</div>}{editorError&&<div className="error">TinyMCE no cargó: {editorError}</div>}<textarea id={idRef.current} ref={textareaRef} defaultValue={value} onChange={e=>onChange(e.target.value)}/></div>
 }
 
 function TaskForm(){
