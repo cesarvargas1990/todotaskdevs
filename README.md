@@ -14,7 +14,7 @@ Abrir:
 - App: `http://localhost:8080/todotaskdev/`
 - Swagger: `http://localhost:8080/todotaskdev/docs`
 
-Para producción detrás del dominio solicitado, publica el servicio Nginx y enruta `https://cesarvargas.tech/todotaskdev` hacia este contenedor. La configuración ya usa el prefijo `/todotaskdev` y proxifica la API en `/todotaskdev/api`.
+Para producción detrás del dominio solicitado, el Nginx del host debe conservar el prefijo y enrutar `https://cesarvargas.tech/todotaskdev` hacia `http://127.0.0.1:8080` sin usar una barra final en `proxy_pass`. El Nginx del contenedor recibe el prefijo, proxifica la API en `/todotaskdev/api` y entrega el frontend bajo `/todotaskdev/`.
 
 ## Variables principales
 
