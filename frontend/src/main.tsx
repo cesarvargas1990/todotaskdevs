@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Link, Navigate, Route, Routes, useNavigate, useParams } from 'react-router-dom';
 import DOMPurify from 'dompurify';
-import { ArrowLeft, Calendar, CheckSquare, FileDown, LayoutGrid, LogOut, MessageCircle, Paperclip, Plus, Save, Share2, User } from 'lucide-react';
+import { ArrowLeft, Calendar, CheckSquare, FileDown, LayoutGrid, LogOut, Menu, MessageCircle, Paperclip, Plus, Save, Share2, User, X } from 'lucide-react';
 import './styles.css';
 
 const API = import.meta.env.VITE_API_BASE_URL || '/todotaskdev/api';
@@ -59,7 +59,7 @@ function Shell({children}:{children:React.ReactNode}){
     </aside>
     {menuOpen&&<button type="button" className="side-backdrop" aria-label="Cerrar menú" onClick={()=>setMenuOpen(false)}/>} 
     <header>
-      <button type="button" className="mobile-brand" aria-label="Abrir menú" aria-expanded={menuOpen} onClick={()=>setMenuOpen(true)}><CheckSquare/><strong>Todo<span>Tasks</span></strong></button>
+      <button type="button" className="menu-toggle" aria-label={menuOpen ? 'Cerrar menú' : 'Abrir menú'} aria-expanded={menuOpen} onClick={()=>setMenuOpen((open)=>!open)}>{menuOpen?<X/>:<Menu/>}<span>{menuOpen?'Cerrar menú':'Menú'}</span></button>
       <nav><Link to="/"><LayoutGrid/> Tablero</Link><Link to="/new"><Plus/> Crear tarea</Link></nav>
       <div className="profile"><span>{me?.name?.slice(0,2) || 'CV'}</span><b>{me?.name}</b></div>
     </header>
