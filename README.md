@@ -25,6 +25,7 @@ Revisar `.env.example`. Cambia `JWT_SECRET` y completa `SMTP_HOST`, `SMTP_PORT`,
 - `POST /auth/login`
 - `GET /auth/me`
 - `GET /users`
+- `GET /projects?search=<texto>`
 - `GET /tasks`
 - `GET /tasks/:id`
 - `POST /tasks`
@@ -35,5 +36,7 @@ Revisar `.env.example`. Cambia `JWT_SECRET` y completa `SMTP_HOST`, `SMTP_PORT`,
 - `POST /tasks/:id/attachments`
 - `GET /attachments/:id/download`
 - `DELETE /attachments/:id`
+
+Al crear una tarea se puede enviar `projectNames` como un arreglo JSON en el formulario. Los proyectos se buscan en el catálogo existente y los nombres nuevos se crean al guardar la tarea.
 
 Todos los endpoints funcionales, salvo login y Swagger, requieren token JWT.

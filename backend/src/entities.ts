@@ -1,4 +1,4 @@
-import { Column, CreateDateColumn, Entity, ManyToOne, OneToMany, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, Index, JoinTable, ManyToMany, ManyToOne, OneToMany, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
 
 export enum TaskStatus {
   TODO = 'TODO',
@@ -25,12 +25,28 @@ export class Task {
   @Column({ type: 'enum', enum: TaskStatus, default: TaskStatus.TODO }) status!: TaskStatus;
   @ManyToOne(() => User, { eager: true }) createdBy!: User;
   @ManyToOne(() => User, { eager: true }) assignedTo!: User;
+  @ManyToMany(() => Project, (project) => project.tasks, { eager: true })
+  @JoinTable({
+    name: 'task_projects',
+    joinColumn: { name: 'task_id', referencedColumnName: 'id' },
+    inverseJoinColumn: { name: 'project_id', referencedColumnName: 'id' },
+  })
+  projects!: Project[];
   @OneToMany(() => TaskComment, (comment) => comment.task) comments!: TaskComment[];
   @OneToMany(() => TaskAttachment, (attachment) => attachment.task) attachments!: TaskAttachment[];
   @OneToMany(() => TaskStatusHistory, (history) => history.task) history!: TaskStatusHistory[];
   @CreateDateColumn({ name: 'created_at' }) createdAt!: Date;
   @UpdateDateColumn({ name: 'updated_at' }) updatedAt!: Date;
   @Column({ name: 'completed_at', type: 'datetime', nullable: true }) completedAt!: Date | null;
+}
+
+@Entity('projects')
+@Index(['name'], { unique: true })
+export class Project {
+  @PrimaryGeneratedColumn() id!: number;
+  @Column({ length: 100 }) name!: string;
+  @ManyToMany(() => Task, (task) => task.projects) tasks!: Task[];
+  @CreateDateColumn({ name: 'created_at' }) createdAt!: Date;
 }
 
 @Entity('task_comments')

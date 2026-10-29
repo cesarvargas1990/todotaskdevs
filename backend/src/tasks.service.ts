@@ -7,7 +7,7 @@ import { join } from 'path';
 import { Repository } from 'typeorm';
 import { v4 as uuid } from 'uuid';
 import { ChangeStatusDto, CommentDto, CreateTaskDto, UpdateTaskDto } from './dto';
-import { Task, TaskAttachment, TaskComment, TaskStatus, TaskStatusHistory, User } from './entities';
+import { Project, Task, TaskAttachment, TaskComment, TaskStatus, TaskStatusHistory, User } from './entities';
 import { MailService } from './mail.service';
 
 const purifier = createDOMPurify(new JSDOM('').window);
@@ -28,6 +28,7 @@ export class TasksService {
   constructor(
     @InjectRepository(User) private readonly users: Repository<User>,
     @InjectRepository(Task) private readonly tasks: Repository<Task>,
+    @InjectRepository(Project) private readonly projects: Repository<Project>,
     @InjectRepository(TaskComment) private readonly comments: Repository<TaskComment>,
     @InjectRepository(TaskAttachment) private readonly attachments: Repository<TaskAttachment>,
     @InjectRepository(TaskStatusHistory) private readonly history: Repository<TaskStatusHistory>,
@@ -40,6 +41,45 @@ export class TasksService {
 
   private normalizeTitle(title: string) {
     return title.trim().replace(/\p{L}/u, letter => letter.toUpperCase());
+  }
+
+  private async resolveProjects(projectNames?: string) {
+    if (!projectNames) return [];
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(projectNames);
+    } catch {
+      throw new BadRequestException('La lista de proyectos no es válida.');
+    }
+    if (!Array.isArray(parsed) || parsed.some((name) => typeof name !== 'string')) {
+      throw new BadRequestException('La lista de proyectos no es válida.');
+    }
+
+    const namesByKey = new Map<string, string>();
+    for (const value of parsed as string[]) {
+      const name = value.trim();
+      if (!name) continue;
+      if (name.length > 100) throw new BadRequestException('Cada proyecto admite hasta 100 caracteres.');
+      const key = name.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
+      if (!namesByKey.has(key)) namesByKey.set(key, name);
+    }
+    if (namesByKey.size > 30) throw new BadRequestException('Puedes asignar hasta 30 proyectos por tarea.');
+    const names = [...namesByKey.values()];
+    if (!names.length) return [];
+
+    await this.projects.createQueryBuilder()
+      .insert()
+      .into(Project)
+      .values(names.map((name) => ({ name })))
+      .orIgnore()
+      .execute();
+
+    const saved = await this.projects.find({ where: names.map((name) => ({ name })) });
+    const byName = new Map(saved.map((project) => [
+      project.name.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase(),
+      project,
+    ]));
+    return [...namesByKey.keys()].map((key) => byName.get(key)).filter((project): project is Project => Boolean(project));
   }
 
   async list() {
@@ -68,6 +108,7 @@ export class TasksService {
       createdBy: user,
       assignedTo,
       status: TaskStatus.TODO,
+      projects: await this.resolveProjects(dto.projectNames),
     }));
     await this.history.save(this.history.create({ task, previousStatus: null, newStatus: TaskStatus.TODO, changedBy: user }));
     await this.saveFiles(task, user, files);

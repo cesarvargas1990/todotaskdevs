@@ -8,8 +8,9 @@ import './styles.css';
 const API = import.meta.env.VITE_API_BASE_URL || '/todotaskdev/api';
 type UserT = { id:number; name:string; email:string };
 type Status = 'TODO'|'IN_PROGRESS'|'BLOCKED'|'DONE';
-type TaskSortKey = 'title'|'status'|'assignee'|'date';
-type Task = { id:number; title:string; detailHtml:string; status:Status; createdBy:UserT; assignedTo:UserT; createdAt:string; updatedAt:string; comments?:any[]; attachments?:any[]; history?:any[] };
+type TaskSortKey = 'title'|'projects'|'status'|'assignee'|'date';
+type Task = { id:number; title:string; detailHtml:string; status:Status; createdBy:UserT; assignedTo:UserT; projects?:ProjectT[]; createdAt:string; updatedAt:string; comments?:any[]; attachments?:any[]; history?:any[] };
+type ProjectT = { id:number; name:string };
 const statuses: [Status,string][] = [['TODO','TODO'],['IN_PROGRESS','En proceso'],['BLOCKED','Bloqueada'],['DONE','Finalizada']];
 const imageTypes = new Set(['image/png','image/jpeg','image/webp','image/gif']);
 function normalizeTaskTitle(title:string){return title.trim().replace(/\p{L}/u,letter=>letter.toLocaleUpperCase());}
@@ -75,31 +76,34 @@ function Shell({children}:{children:React.ReactNode}){
 
 function Board(){
   const [tasks,setTasks]=useState<Task[]>([]), [err,setErr]=useState(''), [dragging,setDragging]=useState<number|null>(null), [blockMove,setBlockMove]=useState<{taskId:number;comment:string}|null>(null), [view,setView]=useState<'kanban'|'table'>(()=>localStorage.getItem('todotasks-board-view')==='table'?'table':'kanban');
-  const [search,setSearch]=useState(''), [statusFilter,setStatusFilter]=useState<Status|'ALL'>('ALL'), [assigneeFilter,setAssigneeFilter]=useState('ALL'), [sortBy,setSortBy]=useState<TaskSortKey>('date'), [sortDirection,setSortDirection]=useState<'asc'|'desc'>('desc'), [page,setPage]=useState(1), [pageSize,setPageSize]=useState(10);
+  const [search,setSearch]=useState(''), [statusFilter,setStatusFilter]=useState<Status|'ALL'>('ALL'), [assigneeFilter,setAssigneeFilter]=useState('ALL'), [projectFilter,setProjectFilter]=useState('ALL'), [sortBy,setSortBy]=useState<TaskSortKey>('date'), [sortDirection,setSortDirection]=useState<'asc'|'desc'>('desc'), [page,setPage]=useState(1), [pageSize,setPageSize]=useState(10);
   const load=()=>api('/tasks').then(setTasks).catch((ex:any)=>setErr(ex.message));
   useEffect(()=>{void load()},[]);
   useEffect(()=>{localStorage.setItem('todotasks-board-view',view)},[view]);
   const assignees=useMemo(()=>Array.from(new Map(tasks.filter(t=>t.assignedTo).map(t=>[t.assignedTo.id,t.assignedTo])).values()).sort((a,b)=>a.name.localeCompare(b.name)),[tasks]);
+  const projects=useMemo(()=>Array.from(new Map(tasks.flatMap(t=>t.projects||[]).map(project=>[project.id,project])).values()).sort((a,b)=>a.name.localeCompare(b.name)),[tasks]);
   const filteredTasks=useMemo(()=>{
     const term=search.trim().toLocaleLowerCase();
     const matches=tasks.filter(t=>{
       if(statusFilter!=='ALL'&&t.status!==statusFilter) return false;
       if(assigneeFilter!=='ALL'&&String(t.assignedTo?.id||'')!==assigneeFilter) return false;
+      if(projectFilter!=='ALL'&&!(t.projects||[]).some(project=>String(project.id)===projectFilter)) return false;
       if(!term) return true;
       const statusLabel=statuses.find(([s])=>s===t.status)?.[1]||t.status;
       const identity=`TT-${String(t.id).padStart(6,'0')}`;
-      return [t.title,String(t.id),identity,statusLabel,t.assignedTo?.name||'',t.createdBy?.name||''].some(value=>value.toLocaleLowerCase().includes(term));
+      return [t.title,String(t.id),identity,statusLabel,t.assignedTo?.name||'',t.createdBy?.name||'',...(t.projects||[]).map(project=>project.name)].some(value=>value.toLocaleLowerCase().includes(term));
     });
     const direction=sortDirection==='asc'?1:-1;
     return matches.sort((a,b)=>{
       let result=0;
       if(sortBy==='title') result=a.title.localeCompare(b.title,undefined,{sensitivity:'base'});
+      if(sortBy==='projects') result=(a.projects||[]).map(project=>project.name).join(', ').localeCompare((b.projects||[]).map(project=>project.name).join(', '),undefined,{sensitivity:'base'});
       if(sortBy==='status') result=statuses.findIndex(([s])=>s===a.status)-statuses.findIndex(([s])=>s===b.status);
       if(sortBy==='assignee') result=(a.assignedTo?.name||'').localeCompare(b.assignedTo?.name||'',undefined,{sensitivity:'base'});
       if(sortBy==='date') result=new Date(a.createdAt).getTime()-new Date(b.createdAt).getTime();
       return result===0?a.id-b.id:result*direction;
     });
-  },[tasks,search,statusFilter,assigneeFilter,sortBy,sortDirection]);
+  },[tasks,search,statusFilter,assigneeFilter,projectFilter,sortBy,sortDirection]);
   const pageCount=Math.max(1,Math.ceil(filteredTasks.length/pageSize));
   const currentPage=Math.min(page,pageCount);
   const pageTasks=filteredTasks.slice((currentPage-1)*pageSize,currentPage*pageSize);
@@ -130,10 +134,11 @@ function Board(){
         <label className="table-search">Buscar<input type="search" value={search} onChange={e=>{setSearch(e.target.value);setPage(1)}} placeholder="Tarea, estado, persona o código"/></label>
         <label>Estado<select value={statusFilter} onChange={e=>{setStatusFilter(e.target.value as Status|'ALL');setPage(1)}}><option value="ALL">Todos los estados</option>{statuses.map(([status,label])=><option value={status} key={status}>{label}</option>)}</select></label>
         <label>Asignada a<select value={assigneeFilter} onChange={e=>{setAssigneeFilter(e.target.value);setPage(1)}}><option value="ALL">Todas las personas</option>{assignees.map(person=><option value={person.id} key={person.id}>{person.name}</option>)}</select></label>
+        <label>Proyecto<select value={projectFilter} onChange={e=>{setProjectFilter(e.target.value);setPage(1)}}><option value="ALL">Todos los proyectos</option>{projects.map(project=><option value={project.id} key={project.id}>{project.name}</option>)}</select></label>
       </div>
       <table className="mobile-task-table"><thead><tr>
-        {([['title','Tarea'],['status','Estado'],['assignee','Asignada a'],['date','Fecha']] as [TaskSortKey,string][]).map(([column,label])=><th key={column} aria-sort={sortBy===column?(sortDirection==='asc'?'ascending':'descending'):'none'}><button type="button" className="sort-button" onClick={()=>sortTasks(column)}>{label}{sortBy===column?(sortDirection==='asc'?<ArrowUp size={14}/>:<ArrowDown size={14}/>):<ArrowUpDown size={14}/>}</button></th>)}
-      </tr></thead><tbody>{pageTasks.map(t=><tr key={t.id}><td><Link to={`/tasks/${t.id}`}><strong>{normalizeTaskTitle(t.title)}</strong><small>TT-{String(t.id).padStart(6,'0')}</small></Link></td><td><span className={`chip ${t.status}`}>{statuses.find(s=>s[0]===t.status)?.[1]}</span></td><td>{t.assignedTo?.name || 'Sin asignar'}</td><td>{new Date(t.createdAt).toLocaleDateString()}</td></tr>)}</tbody></table>
+        {([['title','Tarea'],['projects','Proyectos'],['status','Estado'],['assignee','Asignada a'],['date','Fecha']] as [TaskSortKey,string][]).map(([column,label])=><th key={column} aria-sort={sortBy===column?(sortDirection==='asc'?'ascending':'descending'):'none'}><button type="button" className="sort-button" onClick={()=>sortTasks(column)}>{label}{sortBy===column?(sortDirection==='asc'?<ArrowUp size={14}/>:<ArrowDown size={14}/>):<ArrowUpDown size={14}/>}</button></th>)}
+      </tr></thead><tbody>{pageTasks.map(t=><tr key={t.id}><td><Link to={`/tasks/${t.id}`}><strong>{normalizeTaskTitle(t.title)}</strong><small>TT-{String(t.id).padStart(6,'0')}</small></Link></td><td>{t.projects?.length?<ProjectTags projects={t.projects}/>:<small>Sin proyecto</small>}</td><td><span className={`chip ${t.status}`}>{statuses.find(s=>s[0]===t.status)?.[1]}</span></td><td>{t.assignedTo?.name || 'Sin asignar'}</td><td>{new Date(t.createdAt).toLocaleDateString()}</td></tr>)}</tbody></table>
       {!filteredTasks.length&&<p className="empty">{tasks.length?'No hay tareas que coincidan con la búsqueda y los filtros.':'No hay tareas para mostrar.'}</p>}
       <div className="table-pagination">
         <span className="result-count">{filteredTasks.length?`Mostrando ${(currentPage-1)*pageSize+1}–${Math.min(currentPage*pageSize,filteredTasks.length)} de ${filteredTasks.length}`:'0 tareas'}</span>
@@ -144,7 +149,45 @@ function Board(){
     {blockMove&&<div className="modal-backdrop"><form className="modal" onSubmit={e=>{e.preventDefault(); if(!blockMove.comment.trim()){setErr('Para bloquear una tarea debes indicar el motivo.'); return;} void moveTask(blockMove.taskId,'BLOCKED',blockMove.comment.trim()); setBlockMove(null);}}><h3>Motivo de bloqueo</h3><textarea autoFocus value={blockMove.comment} onChange={e=>setBlockMove({...blockMove,comment:e.target.value})} placeholder="Describe por qué queda bloqueada"/><div className="actions"><button type="button" className="secondary" onClick={()=>{setBlockMove(null); setDragging(null)}}>Cancelar</button><button type="submit">Bloquear tarea</button></div></form></div>}
   </section>
 }
-function TaskCard({task,onDragStart}:{task:Task;onDragStart:()=>void}){return <Link className="task-card" to={`/tasks/${task.id}`} draggable onDragStart={e=>{e.dataTransfer.setData('text/task-id',String(task.id)); onDragStart();}}><h4>{normalizeTaskTitle(task.title)}</h4><div className={`chip ${task.status}`}>{statuses.find(s=>s[0]===task.status)?.[1]}</div><p>TT-{String(task.id).padStart(6,'0')}</p><div className="people"><small>Creada por<br/><b>{task.createdBy.name}</b></small><small>Asignada a<br/><b>{task.assignedTo.name}</b></small></div><footer><span><Calendar size={15}/>{new Date(task.createdAt).toLocaleDateString()}</span><span><MessageCircle size={15}/>{task.comments?.length||0}</span><span><Paperclip size={15}/>{task.attachments?.length||0}</span></footer></Link>}
+function ProjectTags({projects}:{projects:ProjectT[]}){return <div className="project-tags">{projects.map(project=><span className="project-tag" key={project.id}>{project.name}</span>)}</div>}
+
+function TaskCard({task,onDragStart}:{task:Task;onDragStart:()=>void}){return <Link className="task-card" to={`/tasks/${task.id}`} draggable onDragStart={e=>{e.dataTransfer.setData('text/task-id',String(task.id)); onDragStart();}}><h4>{normalizeTaskTitle(task.title)}</h4><div className={`chip ${task.status}`}>{statuses.find(s=>s[0]===task.status)?.[1]}</div><p>TT-{String(task.id).padStart(6,'0')}</p>{!!task.projects?.length&&<ProjectTags projects={task.projects}/>}<div className="people"><small>Creada por<br/><b>{task.createdBy.name}</b></small><small>Asignada a<br/><b>{task.assignedTo.name}</b></small></div><footer><span><Calendar size={15}/>{new Date(task.createdAt).toLocaleDateString()}</span><span><MessageCircle size={15}/>{task.comments?.length||0}</span><span><Paperclip size={15}/>{task.attachments?.length||0}</span></footer></Link>}
+
+function ProjectPicker({value,onChange}:{value:string[];onChange:(projects:string[])=>void}){
+  const [search,setSearch]=useState(''), [options,setOptions]=useState<ProjectT[]>([]), [loading,setLoading]=useState(false), [open,setOpen]=useState(false), [error,setError]=useState('');
+  useEffect(()=>{
+    let active=true;
+    const timer=window.setTimeout(()=>{
+      setLoading(true); setError('');
+      api(`/projects?search=${encodeURIComponent(search.trim())}`).then((items:ProjectT[])=>{if(active)setOptions(items)}).catch((ex:any)=>{if(active)setError(ex.message||'No se pudieron buscar los proyectos')}).finally(()=>{if(active)setLoading(false)});
+    },220);
+    return()=>{active=false; window.clearTimeout(timer)};
+  },[search]);
+  const query=search.trim();
+  const sameName=(a:string,b:string)=>a.localeCompare(b,undefined,{sensitivity:'base'})===0;
+  const exactOption=options.find(project=>sameName(project.name,query));
+  const canCreate=Boolean(query)&&!value.some(name=>sameName(name,query))&&!exactOption;
+  function add(name:string){if(!value.some(project=>sameName(project,name)))onChange([...value,name]);setSearch('');setOpen(true)}
+  function remove(name:string){onChange(value.filter(project=>!sameName(project,name)))}
+  return <div className="project-picker" onBlur={e=>{if(!e.currentTarget.contains(e.relatedTarget as Node|null))setOpen(false)}}>
+    <div className="project-picker-control" onClick={()=>setOpen(true)}>
+      {value.map(name=><span className="project-selection" key={name}>{name}<button type="button" aria-label={`Quitar proyecto ${name}`} onClick={()=>remove(name)}>×</button></span>)}
+      <input role="combobox" aria-label="Buscar o crear proyectos" aria-expanded={open} aria-autocomplete="list" value={search} onFocus={()=>setOpen(true)} onChange={e=>{setSearch(e.target.value);setOpen(true)}} onKeyDown={e=>{
+        if(e.key==='Enter'&&query){e.preventDefault();e.stopPropagation();add(exactOption?.name||query)}
+        if(e.key==='Backspace'&&!search&&value.length){e.preventDefault();remove(value[value.length-1])}
+        if(e.key==='Escape')setOpen(false);
+      }} placeholder={value.length?'Agregar otro proyecto…':'Buscar o crear un proyecto…'}/>
+    </div>
+    {open&&<div className="project-options" role="listbox">
+      {loading&&<div className="project-option-message">Buscando proyectos…</div>}
+      {!loading&&options.filter(project=>!value.some(name=>sameName(name,project.name))).map(project=><button type="button" role="option" aria-selected="false" className="project-option" key={project.id} onMouseDown={e=>e.preventDefault()} onClick={()=>add(project.name)}>{project.name}</button>)}
+      {!loading&&canCreate&&<button type="button" role="option" aria-selected="false" className="project-option create-project-option" onMouseDown={e=>e.preventDefault()} onClick={()=>add(query)}><Plus size={16}/> Crear proyecto “{query}”</button>}
+      {!loading&&!options.length&&!canCreate&&<div className="project-option-message">No hay proyectos que coincidan.</div>}
+      {error&&<div className="project-option-error">{error}</div>}
+    </div>}
+    <small className="project-picker-help">Busca proyectos existentes o escribe un nombre y pulsa Enter para crear uno.</small>
+  </div>
+}
 
 function Editor({value,onChange}:{value:string;onChange:(v:string)=>void}){
   const textareaRef=useRef<HTMLTextAreaElement|null>(null);
@@ -219,12 +262,22 @@ function Editor({value,onChange}:{value:string;onChange:(v:string)=>void}){
 }
 
 function TaskForm(){
-  const [users,setUsers]=useState<UserT[]>([]), [title,setTitle]=useState(''), [detail,setDetail]=useState(''), [assigned,setAssigned]=useState(''), [files,setFiles]=useState<FileList|null>(null), [err,setErr]=useState(''); const nav=useNavigate();
+  const [users,setUsers]=useState<UserT[]>([]), [title,setTitle]=useState(''), [detail,setDetail]=useState(''), [assigned,setAssigned]=useState(''), [files,setFiles]=useState<FileList|null>(null), [projects,setProjects]=useState<string[]>([]), [err,setErr]=useState(''); const nav=useNavigate();
   const previews=useMemo(()=>Array.from(files||[]).map(file=>({file,url:imageTypes.has(file.type)?URL.createObjectURL(file):''})),[files]);
   useEffect(()=>()=>previews.forEach(item=>item.url&&URL.revokeObjectURL(item.url)),[previews]);
   useEffect(()=>{api('/users').then((u)=>{setUsers(u); setAssigned(String(u[0]?.id||''))})},[]);
-  async function submit(e:React.FormEvent){e.preventDefault(); setErr(''); const fd=new FormData(); fd.append('title',normalizeTaskTitle(title)); fd.append('detailHtml',detail); fd.append('assignedToId',assigned); Array.from(files||[]).forEach(f=>fd.append('attachments',f)); try{const t=await api('/tasks',{method:'POST',body:fd}); nav(`/tasks/${t.id}`)}catch(ex:any){setErr(ex.message)}}
-  return <form className="panel form" onSubmit={submit}><h2>Crear tarea</h2><label>Título *<input maxLength={150} required value={title} onChange={e=>setTitle(e.target.value)}/></label><label>Detalle *</label><Editor value={detail} onChange={setDetail}/><div className="grid2"><label>Usuario asignado *<select value={assigned} onChange={e=>setAssigned(e.target.value)}>{users.map(u=><option value={u.id} key={u.id}>{u.name}</option>)}</select></label><label>Estado inicial<input disabled value="TODO"/></label></div><label>Adjuntos<input type="file" multiple onChange={e=>setFiles(e.target.files)}/><small>Máximo 10 MB. PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX, PNG, JPG.</small></label>{previews.length>0&&<div className="preview-grid">{previews.map(({file,url})=><div className="preview" key={`${file.name}-${file.size}`}>{url?<img src={url} alt={file.name}/>:<Paperclip/>}<b>{file.name}</b><small>{Math.round(file.size/1024)} KB</small></div>)}</div>}{err&&<div className="error">{err}</div>}<div className="actions form-actions"><Link className="secondary" to="/">Cancelar</Link><button type="submit"><Save size={18}/> <span>Guardar tarea</span></button></div></form>
+  async function submit(e:React.FormEvent){e.preventDefault(); setErr(''); const fd=new FormData(); fd.append('title',normalizeTaskTitle(title)); fd.append('detailHtml',detail); fd.append('assignedToId',assigned); fd.append('projectNames',JSON.stringify(projects)); Array.from(files||[]).forEach(f=>fd.append('attachments',f)); try{const t=await api('/tasks',{method:'POST',body:fd}); nav(`/tasks/${t.id}`)}catch(ex:any){setErr(ex.message)}}
+  return <form className="panel form" onSubmit={submit}>
+    <h2>Crear tarea</h2>
+    <label>Título *<input maxLength={150} required value={title} onChange={e=>setTitle(e.target.value)}/></label>
+    <label>Detalle *</label><Editor value={detail} onChange={setDetail}/>
+    <label>Proyectos<ProjectPicker value={projects} onChange={setProjects}/></label>
+    <div className="grid2"><label>Usuario asignado *<select value={assigned} onChange={e=>setAssigned(e.target.value)}>{users.map(u=><option value={u.id} key={u.id}>{u.name}</option>)}</select></label><label>Estado inicial<input disabled value="TODO"/></label></div>
+    <label>Adjuntos<input type="file" multiple onChange={e=>setFiles(e.target.files)}/><small>Máximo 10 MB. PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX, PNG, JPG.</small></label>
+    {previews.length>0&&<div className="preview-grid">{previews.map(({file,url})=><div className="preview" key={`${file.name}-${file.size}`}>{url?<img src={url} alt={file.name}/>:<Paperclip/>}<b>{file.name}</b><small>{Math.round(file.size/1024)} KB</small></div>)}</div>}
+    {err&&<div className="error">{err}</div>}
+    <div className="actions form-actions"><Link className="secondary" to="/">Cancelar</Link><button type="submit"><Save size={18}/> <span>Guardar tarea</span></button></div>
+  </form>
 }
 
 function AttachmentPreview({att}:{att:any}){
@@ -243,7 +296,7 @@ function TaskDetail(){
   async function delAtt(att:any){if(confirm('¿Eliminar este archivo?')){await api(`/attachments/${att.id}`,{method:'DELETE'}); load()}}
   async function download(att:any){const res=await fetch(`${API}/attachments/${att.id}/download`,{headers:{Authorization:`Bearer ${token()}`}}); const blob=await res.blob(); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=att.originalName; a.click(); URL.revokeObjectURL(url)}
   async function share(){await navigator.clipboard?.writeText(window.location.href);}
-  return <article className="detail"><div className="detail-actions"><Link to="/" className="back"><ArrowLeft/> Volver</Link><button type="button" className="secondary" onClick={share}><Share2 size={17}/> Compartir</button></div><section className="panel"><small>CÓDIGO DE TAREA</small><h2>TT-{String(task.id).padStart(6,'0')}</h2><h1>{normalizeTaskTitle(task.title)}</h1><div className={`chip ${task.status}`}>{statuses.find(s=>s[0]===task.status)?.[1]}</div></section><section className="panel meta"><div><User/>Creada por <b>{task.createdBy?.name || 'Sin usuario'}</b></div><div><User/>Asignada a <b>{task.assignedTo?.name || 'Sin usuario'}</b></div><div><Calendar/>Creación <b>{new Date(task.createdAt).toLocaleString()}</b></div><div><Calendar/>Actualización <b>{new Date(task.updatedAt).toLocaleString()}</b></div></section><section className="panel"><h3>Descripción</h3><div className="html" dangerouslySetInnerHTML={{__html:clean}}/></section><section className="panel"><h3>Archivos adjuntos</h3>{task.attachments?.length?task.attachments.map(a=><div className="file" key={a.id}><AttachmentPreview att={a}/><div className="file-info"><Paperclip/> <b>{a.originalName}</b> <small>{Math.round(a.fileSize/1024)} KB</small></div><button onClick={()=>download(a)}><FileDown/></button><button onClick={()=>delAtt(a)}>×</button></div>):<p className="empty">Sin archivos adjuntos</p>}</section><section className="panel"><h3>Cambiar estado</h3><div className="row"><select value={status} onChange={e=>setStatus(e.target.value as Status)}>{statuses.map(s=><option value={s[0]} key={s[0]}>{s[1]}</option>)}</select><input placeholder="Comentario, obligatorio si bloquea" value={statusComment} onChange={e=>setStatusComment(e.target.value)}/><button onClick={change}>Cambiar</button></div></section><section className="panel"><h3>Historial de estados</h3>{task.history?.length?task.history.map(h=><p key={h.id}><b>{statuses.find(s=>s[0]===h.newStatus)?.[1]}</b> - {h.changedBy?.name || 'Sistema'} <small>{new Date(h.createdAt).toLocaleString()}</small> {h.comment}</p>):<p className="empty">Sin historial</p>}</section><section className="panel"><h3>Comentarios</h3>{task.comments?.map(c=><p className="comment" key={c.id}><b>{c.user?.name || 'Usuario'}</b><br/>{c.content}<br/><small>{new Date(c.createdAt).toLocaleString()}</small></p>)}<textarea value={comment} onChange={e=>setComment(e.target.value)} placeholder="Agregar comentario"/><button onClick={addComment}><MessageCircle/> Comentar</button></section></article>
+  return <article className="detail"><div className="detail-actions"><Link to="/" className="back"><ArrowLeft/> Volver</Link><button type="button" className="secondary" onClick={share}><Share2 size={17}/> Compartir</button></div><section className="panel"><small>CÓDIGO DE TAREA</small><h2>TT-{String(task.id).padStart(6,'0')}</h2><h1>{normalizeTaskTitle(task.title)}</h1><div className={`chip ${task.status}`}>{statuses.find(s=>s[0]===task.status)?.[1]}</div>{!!task.projects?.length&&<ProjectTags projects={task.projects}/>}</section><section className="panel meta"><div><User/>Creada por <b>{task.createdBy?.name || 'Sin usuario'}</b></div><div><User/>Asignada a <b>{task.assignedTo?.name || 'Sin usuario'}</b></div><div><Calendar/>Creación <b>{new Date(task.createdAt).toLocaleString()}</b></div><div><Calendar/>Actualización <b>{new Date(task.updatedAt).toLocaleString()}</b></div></section><section className="panel"><h3>Descripción</h3><div className="html" dangerouslySetInnerHTML={{__html:clean}}/></section><section className="panel"><h3>Archivos adjuntos</h3>{task.attachments?.length?task.attachments.map(a=><div className="file" key={a.id}><AttachmentPreview att={a}/><div className="file-info"><Paperclip/> <b>{a.originalName}</b> <small>{Math.round(a.fileSize/1024)} KB</small></div><button onClick={()=>download(a)}><FileDown/></button><button onClick={()=>delAtt(a)}>×</button></div>):<p className="empty">Sin archivos adjuntos</p>}</section><section className="panel"><h3>Cambiar estado</h3><div className="row"><select value={status} onChange={e=>setStatus(e.target.value as Status)}>{statuses.map(s=><option value={s[0]} key={s[0]}>{s[1]}</option>)}</select><input placeholder="Comentario, obligatorio si bloquea" value={statusComment} onChange={e=>setStatusComment(e.target.value)}/><button onClick={change}>Cambiar</button></div></section><section className="panel"><h3>Historial de estados</h3>{task.history?.length?task.history.map(h=><p key={h.id}><b>{statuses.find(s=>s[0]===h.newStatus)?.[1]}</b> - {h.changedBy?.name || 'Sistema'} <small>{new Date(h.createdAt).toLocaleString()}</small> {h.comment}</p>):<p className="empty">Sin historial</p>}</section><section className="panel"><h3>Comentarios</h3>{task.comments?.map(c=><p className="comment" key={c.id}><b>{c.user?.name || 'Usuario'}</b><br/>{c.content}<br/><small>{new Date(c.createdAt).toLocaleString()}</small></p>)}<textarea value={comment} onChange={e=>setComment(e.target.value)} placeholder="Agregar comentario"/><button onClick={addComment}><MessageCircle/> Comentar</button></section></article>
 }
 
 createRoot(document.getElementById('root')!).render(<App/>);

@@ -11,6 +11,7 @@ export class CreateTaskDto {
   @IsString() @MaxLength(150) title!: string;
   @IsString() @IsNotEmpty() detailHtml!: string;
   @Type(() => Number) @IsInt() assignedToId!: number;
+  @IsOptional() @IsString() projectNames?: string;
 }
 
 export class UpdateTaskDto {
