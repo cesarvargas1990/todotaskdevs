@@ -18,7 +18,7 @@ async function api(path:string, options:RequestInit={}) {
   if (!(options.body instanceof FormData)) headers['Content-Type']='application/json';
   if (token()) headers.Authorization = `Bearer ${token()}`;
   const res = await fetch(`${API}${path}`, { ...options, headers });
-  if (res.status === 401 && token() && !window.location.pathname.endsWith('/login')) {
+  if (res.status === 401 && !window.location.pathname.endsWith('/login')) {
     localStorage.removeItem('token');
     window.location.assign(`${import.meta.env.VITE_BASE_PATH || '/todotaskdev/'}login`);
   }
