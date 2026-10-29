@@ -18,6 +18,10 @@ async function api(path:string, options:RequestInit={}) {
   if (!(options.body instanceof FormData)) headers['Content-Type']='application/json';
   if (token()) headers.Authorization = `Bearer ${token()}`;
   const res = await fetch(`${API}${path}`, { ...options, headers });
+  if (res.status === 401 && token() && !window.location.pathname.endsWith('/login')) {
+    localStorage.removeItem('token');
+    window.location.assign(`${import.meta.env.VITE_BASE_PATH || '/todotaskdev/'}login`);
+  }
   if (!res.ok) throw new Error((await res.json().catch(()=>({message:'Error'}))).message || 'Error');
   return res.json();
 }

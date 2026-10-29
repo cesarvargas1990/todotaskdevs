@@ -36,7 +36,7 @@ class SeedService implements OnApplicationBootstrap {
     TypeOrmModule.forFeature([User, Task, TaskComment, TaskAttachment, TaskStatusHistory]),
     JwtModule.register({
       secret: process.env.JWT_SECRET || 'dev_secret',
-      signOptions: { expiresIn: process.env.JWT_EXPIRES_IN || '8h' },
+      signOptions: { expiresIn: process.env.JWT_EXPIRES_IN || '8d' },
     }),
   ],
   controllers: [AuthController, UsersController, TasksController],

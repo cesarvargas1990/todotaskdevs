@@ -29,6 +29,7 @@ services:
       DB_NAME: ${MYSQL_DATABASE:-todotasks}
       DB_USER: ${MYSQL_USER:-todotasks}
       DB_PASSWORD: ${MYSQL_PASSWORD:-todotasks_password}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-8d}
       PUBLIC_APP_URL: ${PUBLIC_APP_URL:-https://cesarvargas.tech/todotaskdev}
       MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:-}
       MAIL_FROM_NAME: ${MAIL_FROM_NAME:-TodoTaskDev}
