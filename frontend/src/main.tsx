@@ -2,12 +2,13 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Link, Navigate, Route, Routes, useNavigate, useParams } from 'react-router-dom';
 import DOMPurify from 'dompurify';
-import { ArrowLeft, Calendar, CheckSquare, FileDown, LayoutGrid, List, LogOut, Menu, MessageCircle, Paperclip, Plus, Save, Share2, User, X } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowUp, ArrowUpDown, Calendar, CheckSquare, ChevronLeft, ChevronRight, FileDown, LayoutGrid, List, LogOut, Menu, MessageCircle, Paperclip, Plus, Save, Share2, User, X } from 'lucide-react';
 import './styles.css';
 
 const API = import.meta.env.VITE_API_BASE_URL || '/todotaskdev/api';
 type UserT = { id:number; name:string; email:string };
 type Status = 'TODO'|'IN_PROGRESS'|'BLOCKED'|'DONE';
+type TaskSortKey = 'title'|'status'|'assignee'|'date';
 type Task = { id:number; title:string; detailHtml:string; status:Status; createdBy:UserT; assignedTo:UserT; createdAt:string; updatedAt:string; comments?:any[]; attachments?:any[]; history?:any[] };
 const statuses: [Status,string][] = [['TODO','TODO'],['IN_PROGRESS','En proceso'],['BLOCKED','Bloqueada'],['DONE','Finalizada']];
 const imageTypes = new Set(['image/png','image/jpeg','image/webp','image/gif']);
@@ -73,9 +74,35 @@ function Shell({children}:{children:React.ReactNode}){
 
 function Board(){
   const [tasks,setTasks]=useState<Task[]>([]), [err,setErr]=useState(''), [dragging,setDragging]=useState<number|null>(null), [blockMove,setBlockMove]=useState<{taskId:number;comment:string}|null>(null), [view,setView]=useState<'kanban'|'table'>(()=>localStorage.getItem('todotasks-board-view')==='table'?'table':'kanban');
+  const [search,setSearch]=useState(''), [statusFilter,setStatusFilter]=useState<Status|'ALL'>('ALL'), [assigneeFilter,setAssigneeFilter]=useState('ALL'), [sortBy,setSortBy]=useState<TaskSortKey>('date'), [sortDirection,setSortDirection]=useState<'asc'|'desc'>('desc'), [page,setPage]=useState(1), [pageSize,setPageSize]=useState(10);
   const load=()=>api('/tasks').then(setTasks).catch((ex:any)=>setErr(ex.message));
   useEffect(()=>{void load()},[]);
   useEffect(()=>{localStorage.setItem('todotasks-board-view',view)},[view]);
+  const assignees=useMemo(()=>Array.from(new Map(tasks.filter(t=>t.assignedTo).map(t=>[t.assignedTo.id,t.assignedTo])).values()).sort((a,b)=>a.name.localeCompare(b.name)),[tasks]);
+  const filteredTasks=useMemo(()=>{
+    const term=search.trim().toLocaleLowerCase();
+    const matches=tasks.filter(t=>{
+      if(statusFilter!=='ALL'&&t.status!==statusFilter) return false;
+      if(assigneeFilter!=='ALL'&&String(t.assignedTo?.id||'')!==assigneeFilter) return false;
+      if(!term) return true;
+      const statusLabel=statuses.find(([s])=>s===t.status)?.[1]||t.status;
+      const identity=`TT-${String(t.id).padStart(6,'0')}`;
+      return [t.title,String(t.id),identity,statusLabel,t.assignedTo?.name||'',t.createdBy?.name||''].some(value=>value.toLocaleLowerCase().includes(term));
+    });
+    const direction=sortDirection==='asc'?1:-1;
+    return matches.sort((a,b)=>{
+      let result=0;
+      if(sortBy==='title') result=a.title.localeCompare(b.title,undefined,{sensitivity:'base'});
+      if(sortBy==='status') result=statuses.findIndex(([s])=>s===a.status)-statuses.findIndex(([s])=>s===b.status);
+      if(sortBy==='assignee') result=(a.assignedTo?.name||'').localeCompare(b.assignedTo?.name||'',undefined,{sensitivity:'base'});
+      if(sortBy==='date') result=new Date(a.createdAt).getTime()-new Date(b.createdAt).getTime();
+      return result===0?a.id-b.id:result*direction;
+    });
+  },[tasks,search,statusFilter,assigneeFilter,sortBy,sortDirection]);
+  const pageCount=Math.max(1,Math.ceil(filteredTasks.length/pageSize));
+  const currentPage=Math.min(page,pageCount);
+  const pageTasks=filteredTasks.slice((currentPage-1)*pageSize,currentPage*pageSize);
+  function sortTasks(column:TaskSortKey){if(sortBy===column)setSortDirection(value=>value==='asc'?'desc':'asc');else{setSortBy(column);setSortDirection('asc')}setPage(1)}
   async function moveTask(taskId:number,status:Status,comment=''){
     const previous=tasks;
     setTasks(tasks.map(t=>t.id===taskId?{...t,status,updatedAt:new Date().toISOString()}:t));
@@ -98,7 +125,20 @@ function Board(){
     {err&&<div className="error">{err}</div>}
     <div className="kanban">{statuses.map(([s,label])=>{const items=tasks.filter(t=>t.status===s);return <section className={`col ${s} ${dragging?'drop-ready':''}`} key={s} onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault(); const id=Number(e.dataTransfer.getData('text/task-id')); if(id) dropTask(id,s)}}><h3><span></span>{label}<em>{items.length}</em></h3>{items.map(t=><TaskCard key={t.id} task={t} onDragStart={()=>setDragging(t.id)}/>)}</section>})}</div>
     <div className={`mobile-task-table-wrap ${view==='table'?'desktop-table-view':''}`}>
-      <table className="mobile-task-table"><thead><tr><th>Tarea</th><th>Estado</th><th>Asignada a</th><th>Fecha</th></tr></thead><tbody>{tasks.map(t=><tr key={t.id}><td><Link to={`/tasks/${t.id}`}><strong>{t.title}</strong><small>TT-{String(t.id).padStart(6,'0')}</small></Link></td><td><span className={`chip ${t.status}`}>{statuses.find(s=>s[0]===t.status)?.[1]}</span></td><td>{t.assignedTo?.name || 'Sin asignar'}</td><td>{new Date(t.createdAt).toLocaleDateString()}</td></tr>)}</tbody></table>{!tasks.length&&<p className="empty">No hay tareas para mostrar.</p>}
+      <div className="table-toolbar">
+        <label className="table-search">Buscar<input type="search" value={search} onChange={e=>{setSearch(e.target.value);setPage(1)}} placeholder="Tarea, estado, persona o código"/></label>
+        <label>Estado<select value={statusFilter} onChange={e=>{setStatusFilter(e.target.value as Status|'ALL');setPage(1)}}><option value="ALL">Todos los estados</option>{statuses.map(([status,label])=><option value={status} key={status}>{label}</option>)}</select></label>
+        <label>Asignada a<select value={assigneeFilter} onChange={e=>{setAssigneeFilter(e.target.value);setPage(1)}}><option value="ALL">Todas las personas</option>{assignees.map(person=><option value={person.id} key={person.id}>{person.name}</option>)}</select></label>
+      </div>
+      <table className="mobile-task-table"><thead><tr>
+        {([['title','Tarea'],['status','Estado'],['assignee','Asignada a'],['date','Fecha']] as [TaskSortKey,string][]).map(([column,label])=><th key={column} aria-sort={sortBy===column?(sortDirection==='asc'?'ascending':'descending'):'none'}><button type="button" className="sort-button" onClick={()=>sortTasks(column)}>{label}{sortBy===column?(sortDirection==='asc'?<ArrowUp size={14}/>:<ArrowDown size={14}/>):<ArrowUpDown size={14}/>}</button></th>)}
+      </tr></thead><tbody>{pageTasks.map(t=><tr key={t.id}><td><Link to={`/tasks/${t.id}`}><strong>{t.title}</strong><small>TT-{String(t.id).padStart(6,'0')}</small></Link></td><td><span className={`chip ${t.status}`}>{statuses.find(s=>s[0]===t.status)?.[1]}</span></td><td>{t.assignedTo?.name || 'Sin asignar'}</td><td>{new Date(t.createdAt).toLocaleDateString()}</td></tr>)}</tbody></table>
+      {!filteredTasks.length&&<p className="empty">{tasks.length?'No hay tareas que coincidan con la búsqueda y los filtros.':'No hay tareas para mostrar.'}</p>}
+      <div className="table-pagination">
+        <span className="result-count">{filteredTasks.length?`Mostrando ${(currentPage-1)*pageSize+1}–${Math.min(currentPage*pageSize,filteredTasks.length)} de ${filteredTasks.length}`:'0 tareas'}</span>
+        <label>Por página<select value={pageSize} onChange={e=>{setPageSize(Number(e.target.value));setPage(1)}}><option value={10}>10</option><option value={25}>25</option><option value={50}>50</option></select></label>
+        <div className="page-controls"><button type="button" className="page-button" aria-label="Página anterior" disabled={currentPage<=1} onClick={()=>setPage(value=>Math.max(1,value-1))}><ChevronLeft size={17}/> Anterior</button><span>Página {currentPage} de {pageCount}</span><button type="button" className="page-button" aria-label="Página siguiente" disabled={currentPage>=pageCount} onClick={()=>setPage(value=>Math.min(pageCount,value+1))}>Siguiente <ChevronRight size={17}/></button></div>
+      </div>
     </div>
     {blockMove&&<div className="modal-backdrop"><form className="modal" onSubmit={e=>{e.preventDefault(); if(!blockMove.comment.trim()){setErr('Para bloquear una tarea debes indicar el motivo.'); return;} void moveTask(blockMove.taskId,'BLOCKED',blockMove.comment.trim()); setBlockMove(null);}}><h3>Motivo de bloqueo</h3><textarea autoFocus value={blockMove.comment} onChange={e=>setBlockMove({...blockMove,comment:e.target.value})} placeholder="Describe por qué queda bloqueada"/><div className="actions"><button type="button" className="secondary" onClick={()=>{setBlockMove(null); setDragging(null)}}>Cancelar</button><button type="submit">Bloquear tarea</button></div></form></div>}
   </section>
