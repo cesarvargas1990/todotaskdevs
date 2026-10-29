@@ -72,9 +72,10 @@ function Shell({children}:{children:React.ReactNode}){
 }
 
 function Board(){
-  const [tasks,setTasks]=useState<Task[]>([]), [err,setErr]=useState(''), [dragging,setDragging]=useState<number|null>(null), [blockMove,setBlockMove]=useState<{taskId:number;comment:string}|null>(null), [view,setView]=useState<'kanban'|'table'>('kanban');
+  const [tasks,setTasks]=useState<Task[]>([]), [err,setErr]=useState(''), [dragging,setDragging]=useState<number|null>(null), [blockMove,setBlockMove]=useState<{taskId:number;comment:string}|null>(null), [view,setView]=useState<'kanban'|'table'>(()=>localStorage.getItem('todotasks-board-view')==='table'?'table':'kanban');
   const load=()=>api('/tasks').then(setTasks).catch((ex:any)=>setErr(ex.message));
   useEffect(()=>{void load()},[]);
+  useEffect(()=>{localStorage.setItem('todotasks-board-view',view)},[view]);
   async function moveTask(taskId:number,status:Status,comment=''){
     const previous=tasks;
     setTasks(tasks.map(t=>t.id===taskId?{...t,status,updatedAt:new Date().toISOString()}:t));
