@@ -95,3 +95,23 @@ input,select,textarea,button{font-size:16px!important}
 @media (max-width:900px){
   .menu-toggle{padding:8px 10px;font-size:14px!important}
 }
+
+/* Desktop board view switch and task table */
+.board-actions{display:flex;align-items:center;gap:12px}
+.view-toggle{display:flex;gap:4px;padding:4px;border:1px solid var(--line);border-radius:9px;background:white}
+.view-toggle button{padding:8px 11px;border:0;border-radius:6px;background:transparent;color:#52628a;font-size:13px}
+.view-toggle button.active{background:#eef4ff;color:var(--blue)}
+.table-view .kanban{display:none}
+.table-view .desktop-table-view{display:block;overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:white;box-shadow:0 8px 22px rgba(25,46,91,.06)}
+.desktop-table-view .mobile-task-table{width:100%;min-width:720px;border-collapse:collapse;font-size:13px}
+.desktop-table-view .mobile-task-table th,.desktop-table-view .mobile-task-table td{padding:14px 16px;text-align:left;border-bottom:1px solid #e8eef7;vertical-align:middle}
+.desktop-table-view .mobile-task-table th{background:#f5f8fd;color:#52628a;font-size:11px;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap}
+.desktop-table-view .mobile-task-table tbody tr:last-child td{border-bottom:0}
+.desktop-table-view .mobile-task-table tbody tr:hover{background:#f9fbff}
+.desktop-table-view .mobile-task-table td:first-child{width:46%}
+.desktop-table-view .mobile-task-table td a{display:grid;gap:4px;min-width:220px;color:#10234f}
+.desktop-table-view .mobile-task-table td strong{font-size:14px;line-height:1.35;overflow-wrap:anywhere}
+.desktop-table-view .mobile-task-table td small{color:var(--muted);font-weight:800}
+.desktop-table-view .mobile-task-table .chip{white-space:nowrap}
+.desktop-table-view .empty{padding:16px;margin:0}
+@media (max-width:900px){.board-actions{gap:0}.view-toggle{display:none}}

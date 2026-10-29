@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Link, Navigate, Route, Routes, useNavigate, useParams } from 'react-router-dom';
 import DOMPurify from 'dompurify';
-import { ArrowLeft, Calendar, CheckSquare, FileDown, LayoutGrid, LogOut, Menu, MessageCircle, Paperclip, Plus, Save, Share2, User, X } from 'lucide-react';
+import { ArrowLeft, Calendar, CheckSquare, FileDown, LayoutGrid, List, LogOut, Menu, MessageCircle, Paperclip, Plus, Save, Share2, User, X } from 'lucide-react';
 import './styles.css';
 
 const API = import.meta.env.VITE_API_BASE_URL || '/todotaskdev/api';
@@ -72,7 +72,7 @@ function Shell({children}:{children:React.ReactNode}){
 }
 
 function Board(){
-  const [tasks,setTasks]=useState<Task[]>([]), [err,setErr]=useState(''), [dragging,setDragging]=useState<number|null>(null), [blockMove,setBlockMove]=useState<{taskId:number;comment:string}|null>(null);
+  const [tasks,setTasks]=useState<Task[]>([]), [err,setErr]=useState(''), [dragging,setDragging]=useState<number|null>(null), [blockMove,setBlockMove]=useState<{taskId:number;comment:string}|null>(null), [view,setView]=useState<'kanban'|'table'>('kanban');
   const load=()=>api('/tasks').then(setTasks).catch((ex:any)=>setErr(ex.message));
   useEffect(()=>{void load()},[]);
   async function moveTask(taskId:number,status:Status,comment=''){
@@ -83,7 +83,24 @@ function Board(){
     finally{setDragging(null);}
   }
   function dropTask(taskId:number,status:Status){if(status==='BLOCKED') setBlockMove({taskId,comment:''}); else void moveTask(taskId,status)}
-  return <section className="board-page"><div className="topline"><div><span className="eyebrow">GESTIÓN DE TAREAS</span><h2>Tablero</h2></div><Link className="primary" to="/new"><Plus/> Nueva tarea</Link></div>{err&&<div className="error">{err}</div>}<div className="kanban">{statuses.map(([s,label])=>{const items=tasks.filter(t=>t.status===s);return <section className={`col ${s} ${dragging?'drop-ready':''}`} key={s} onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault(); const id=Number(e.dataTransfer.getData('text/task-id')); if(id) dropTask(id,s)}}><h3><span></span>{label}<em>{items.length}</em></h3>{items.map(t=><TaskCard key={t.id} task={t} onDragStart={()=>setDragging(t.id)}/>)}</section>})}</div><div className="mobile-task-table-wrap"><table className="mobile-task-table"><thead><tr><th>Tarea</th><th>Estado</th><th>Asignada a</th><th>Fecha</th></tr></thead><tbody>{tasks.map(t=><tr key={t.id}><td><Link to={`/tasks/${t.id}`}><strong>{t.title}</strong><small>TT-{String(t.id).padStart(6,'0')}</small></Link></td><td><span className={`chip ${t.status}`}>{statuses.find(s=>s[0]===t.status)?.[1]}</span></td><td>{t.assignedTo?.name || 'Sin asignar'}</td><td>{new Date(t.createdAt).toLocaleDateString()}</td></tr>)}</tbody></table>{!tasks.length&&<p className="empty">No hay tareas para mostrar.</p>}</div>{blockMove&&<div className="modal-backdrop"><form className="modal" onSubmit={e=>{e.preventDefault(); if(!blockMove.comment.trim()){setErr('Para bloquear una tarea debes indicar el motivo.'); return;} void moveTask(blockMove.taskId,'BLOCKED',blockMove.comment.trim()); setBlockMove(null);}}><h3>Motivo de bloqueo</h3><textarea autoFocus value={blockMove.comment} onChange={e=>setBlockMove({...blockMove,comment:e.target.value})} placeholder="Describe por qué queda bloqueada"/><div className="actions"><button type="button" className="secondary" onClick={()=>{setBlockMove(null); setDragging(null)}}>Cancelar</button><button type="submit">Bloquear tarea</button></div></form></div>}</section>
+  return <section className={`board-page ${view==='table'?'table-view':''}`}>
+    <div className="topline">
+      <div><span className="eyebrow">GESTIÓN DE TAREAS</span><h2>Tablero</h2></div>
+      <div className="board-actions">
+        <div className="view-toggle" role="group" aria-label="Vista del tablero">
+          <button type="button" className={view==='kanban'?'active':''} aria-pressed={view==='kanban'} onClick={()=>setView('kanban')}><LayoutGrid size={16}/> Kanban</button>
+          <button type="button" className={view==='table'?'active':''} aria-pressed={view==='table'} onClick={()=>setView('table')}><List size={16}/> Tabla</button>
+        </div>
+        <Link className="primary" to="/new"><Plus/> Nueva tarea</Link>
+      </div>
+    </div>
+    {err&&<div className="error">{err}</div>}
+    <div className="kanban">{statuses.map(([s,label])=>{const items=tasks.filter(t=>t.status===s);return <section className={`col ${s} ${dragging?'drop-ready':''}`} key={s} onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault(); const id=Number(e.dataTransfer.getData('text/task-id')); if(id) dropTask(id,s)}}><h3><span></span>{label}<em>{items.length}</em></h3>{items.map(t=><TaskCard key={t.id} task={t} onDragStart={()=>setDragging(t.id)}/>)}</section>})}</div>
+    <div className={`mobile-task-table-wrap ${view==='table'?'desktop-table-view':''}`}>
+      <table className="mobile-task-table"><thead><tr><th>Tarea</th><th>Estado</th><th>Asignada a</th><th>Fecha</th></tr></thead><tbody>{tasks.map(t=><tr key={t.id}><td><Link to={`/tasks/${t.id}`}><strong>{t.title}</strong><small>TT-{String(t.id).padStart(6,'0')}</small></Link></td><td><span className={`chip ${t.status}`}>{statuses.find(s=>s[0]===t.status)?.[1]}</span></td><td>{t.assignedTo?.name || 'Sin asignar'}</td><td>{new Date(t.createdAt).toLocaleDateString()}</td></tr>)}</tbody></table>{!tasks.length&&<p className="empty">No hay tareas para mostrar.</p>}
+    </div>
+    {blockMove&&<div className="modal-backdrop"><form className="modal" onSubmit={e=>{e.preventDefault(); if(!blockMove.comment.trim()){setErr('Para bloquear una tarea debes indicar el motivo.'); return;} void moveTask(blockMove.taskId,'BLOCKED',blockMove.comment.trim()); setBlockMove(null);}}><h3>Motivo de bloqueo</h3><textarea autoFocus value={blockMove.comment} onChange={e=>setBlockMove({...blockMove,comment:e.target.value})} placeholder="Describe por qué queda bloqueada"/><div className="actions"><button type="button" className="secondary" onClick={()=>{setBlockMove(null); setDragging(null)}}>Cancelar</button><button type="submit">Bloquear tarea</button></div></form></div>}
+  </section>
 }
 function TaskCard({task,onDragStart}:{task:Task;onDragStart:()=>void}){return <Link className="task-card" to={`/tasks/${task.id}`} draggable onDragStart={e=>{e.dataTransfer.setData('text/task-id',String(task.id)); onDragStart();}}><h4>{task.title}</h4><div className={`chip ${task.status}`}>{statuses.find(s=>s[0]===task.status)?.[1]}</div><p>TT-{String(task.id).padStart(6,'0')}</p><div className="people"><small>Creada por<br/><b>{task.createdBy.name}</b></small><small>Asignada a<br/><b>{task.assignedTo.name}</b></small></div><footer><span><Calendar size={15}/>{new Date(task.createdAt).toLocaleDateString()}</span><span><MessageCircle size={15}/>{task.comments?.length||0}</span><span><Paperclip size={15}/>{task.attachments?.length||0}</span></footer></Link>}
 
