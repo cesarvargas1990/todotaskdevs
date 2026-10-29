@@ -38,6 +38,10 @@ export class TasksService {
     return purifier.sanitize(html, { ADD_TAGS: ['img'], ADD_ATTR: ['src', 'alt', 'style', 'class'] });
   }
 
+  private normalizeTitle(title: string) {
+    return title.trim().replace(/\p{L}/u, letter => letter.toUpperCase());
+  }
+
   async list() {
     return this.tasks.find({ relations: { comments: true, attachments: true }, order: { updatedAt: 'DESC' } });
   }
@@ -59,7 +63,7 @@ export class TasksService {
     const assignedTo = await this.users.findOneBy({ id: dto.assignedToId });
     if (!assignedTo) throw new BadRequestException('Usuario asignado inválido');
     const task = await this.tasks.save(this.tasks.create({
-      title: dto.title,
+      title: this.normalizeTitle(dto.title),
       detailHtml: this.sanitize(dto.detailHtml),
       createdBy: user,
       assignedTo,
@@ -79,7 +83,7 @@ export class TasksService {
       if (!assignedTo) throw new BadRequestException('Usuario asignado inválido');
       task.assignedTo = assignedTo;
     }
-    if (dto.title) task.title = dto.title;
+    if (dto.title) task.title = this.normalizeTitle(dto.title);
     if (dto.detailHtml) task.detailHtml = this.sanitize(dto.detailHtml);
     const saved = await this.tasks.save(task);
     if (previousAssigned !== saved.assignedTo.email) {
