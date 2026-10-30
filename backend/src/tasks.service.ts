@@ -67,12 +67,21 @@ export class TasksService {
     const names = [...namesByKey.values()];
     if (!names.length) return [];
 
-    await this.projects.createQueryBuilder()
-      .insert()
-      .into(Project)
-      .values(names.map((name) => ({ name })))
-      .orIgnore()
-      .execute();
+    const existing = await this.projects.find({ where: names.map((name) => ({ name })) });
+    const existingKeys = new Set(existing.map((project) =>
+      project.name.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase(),
+    ));
+    const missingNames = [...namesByKey.entries()]
+      .filter(([key]) => !existingKeys.has(key))
+      .map(([, name]) => name);
+
+    if (missingNames.length) {
+      const values = missingNames.map(() => '(?)').join(', ');
+      await this.projects.query(
+        `INSERT IGNORE INTO \`projects\` (\`name\`) VALUES ${values}`,
+        missingNames,
+      );
+    }
 
     const saved = await this.projects.find({ where: names.map((name) => ({ name })) });
     const byName = new Map(saved.map((project) => [
