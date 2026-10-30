@@ -128,7 +128,10 @@ function Board(){
       </div>
     </div>
     {err&&<div className="error">{err}</div>}
-    <div className="kanban">{statuses.map(([s,label])=>{const items=tasks.filter(t=>t.status===s);return <section className={`col ${s} ${dragging?'drop-ready':''}`} key={s} onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault(); const id=Number(e.dataTransfer.getData('text/task-id')); if(id) dropTask(id,s)}}><h3><span></span>{label}<em>{items.length}</em></h3>{items.map(t=><TaskCard key={t.id} task={t} onDragStart={()=>setDragging(t.id)}/>)}</section>})}</div>
+    <div className="kanban-toolbar">
+      <label>Filtrar por proyecto<select aria-label="Filtrar Kanban por proyecto" value={projectFilter} onChange={e=>setProjectFilter(e.target.value)}><option value="ALL">Todos los proyectos</option>{projects.map(project=><option value={project.id} key={project.id}>{project.name}</option>)}</select></label>
+    </div>
+    <div className="kanban">{statuses.map(([s,label])=>{const items=tasks.filter(t=>t.status===s&&(projectFilter==='ALL'||(t.projects||[]).some(project=>String(project.id)===projectFilter)));return <section className={`col ${s} ${dragging?'drop-ready':''}`} key={s} onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault(); const id=Number(e.dataTransfer.getData('text/task-id')); if(id) dropTask(id,s)}}><h3><span></span>{label}<em>{items.length}</em></h3>{items.map(t=><TaskCard key={t.id} task={t} onDragStart={()=>setDragging(t.id)}/>)}</section>})}</div>
     <div className={`mobile-task-table-wrap ${view==='table'?'desktop-table-view':''}`}>
       <div className="table-toolbar">
         <label className="table-search">Buscar<input type="search" value={search} onChange={e=>{setSearch(e.target.value);setPage(1)}} placeholder="Tarea, estado, persona o código"/></label>
