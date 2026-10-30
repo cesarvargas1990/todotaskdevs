@@ -126,6 +126,7 @@ export class TasksService {
     }
     if (dto.title) task.title = this.normalizeTitle(dto.title);
     if (dto.detailHtml) task.detailHtml = this.sanitize(dto.detailHtml);
+    if (dto.projectNames !== undefined) task.projects = await this.resolveProjects(dto.projectNames);
     const saved = await this.tasks.save(task);
     if (previousAssigned !== saved.assignedTo.email) {
       await this.mail.taskEvent(await this.one(id), 'Tarea reasignada', `${user.name} reasignó la tarea.`);

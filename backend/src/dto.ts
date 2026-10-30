@@ -18,6 +18,7 @@ export class UpdateTaskDto {
   @IsOptional() @IsString() @MaxLength(150) title?: string;
   @IsOptional() @IsString() detailHtml?: string;
   @IsOptional() @Type(() => Number) @IsInt() assignedToId?: number;
+  @IsOptional() @IsString() projectNames?: string;
 }
 
 export class ChangeStatusDto {
