@@ -100,10 +100,15 @@ input,select,textarea,button{font-size:16px!important}
 
 /* Desktop board view switch and task table */
 .board-actions{display:flex;align-items:center;gap:12px}
-.kanban-toolbar{display:flex;align-items:center;gap:12px;margin:0 0 14px}
-.kanban-toolbar label{display:grid;grid-template-columns:auto minmax(190px,280px);align-items:center;gap:10px;color:#52628a;font-size:12px;font-weight:800}
-.kanban-toolbar select{width:100%;min-width:0;border:1px solid #ccd7e8;border-radius:7px;padding:9px 10px;background:white;color:#10234f}
-.table-view .kanban-toolbar{display:none}
+.board-page{margin-top:-8px!important}
+.board-page .topline{display:grid;grid-template-columns:auto minmax(300px,1fr) auto;gap:24px;margin-bottom:12px!important}
+.board-heading h2{margin:0;font-size:28px}
+.board-project-filter{display:grid;grid-template-columns:auto minmax(190px,300px);align-items:center;gap:10px;color:#52628a;font-size:12px;font-weight:800}
+.board-project-filter select{width:100%;min-width:0;border:1px solid #ccd7e8;border-radius:7px;padding:9px 10px;background:white;color:#10234f}
+.table-view .board-project-filter{display:none}
+.board-refresh{width:38px;height:38px;padding:8px;border-radius:8px;background:white;color:#52628a}
+.board-refresh:hover{color:var(--blue);background:#eef4ff}
+@media (max-width:1200px) and (min-width:901px){.board-page .topline{grid-template-columns:1fr auto;gap:14px}.board-project-filter{grid-column:1/-1;grid-row:2;grid-template-columns:auto minmax(190px,340px)}}
 .view-toggle{display:flex;gap:4px;padding:4px;border:1px solid var(--line);border-radius:9px;background:white}
 .view-toggle button{padding:8px 11px;border:0;border-radius:6px;background:transparent;color:#52628a;font-size:13px}
 .view-toggle button.active{background:#eef4ff;color:var(--blue)}
@@ -120,8 +125,7 @@ input,select,textarea,button{font-size:16px!important}
 .desktop-table-view .mobile-task-table td small{color:var(--muted);font-weight:800}
 .desktop-table-view .mobile-task-table .chip{white-space:nowrap}
 .desktop-table-view .empty{padding:16px;margin:0}
-@media (max-width:900px){.board-actions{gap:0}.view-toggle{display:none}}
-@media (max-width:900px){.kanban-toolbar{display:none}}
+@media (max-width:900px){.board-page{margin-top:0!important}.board-page .topline{grid-template-columns:1fr auto;gap:10px}.board-heading h2{font-size:24px}.board-project-filter{display:none}.board-actions{gap:0}.view-toggle{display:none}.board-refresh{width:36px;height:36px;padding:8px}}
 .table-toolbar{display:grid;grid-template-columns:minmax(240px,2fr) repeat(3,minmax(150px,1fr));gap:12px;padding:14px;background:white;border-bottom:1px solid #e8eef7}
 .table-toolbar label,.table-pagination label{display:grid;gap:6px;color:#52628a;font-size:12px;font-weight:800}
 .table-toolbar input,.table-toolbar select,.table-pagination select{width:100%;min-width:0;border:1px solid #ccd7e8;border-radius:7px;padding:9px 10px;background:white;color:#10234f}

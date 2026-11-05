@@ -125,21 +125,18 @@ function Board(){
   function dropTask(taskId:number,status:Status){if(status==='BLOCKED') setBlockMove({taskId,comment:''}); else void moveTask(taskId,status)}
   return <section className={`board-page ${view==='table'?'table-view':''}`}>
     <div className="topline">
-      <div><span className="eyebrow">GESTIÓN DE TAREAS</span><h2>Tablero</h2></div>
+      <div className="board-heading"><span className="eyebrow">GESTIÓN DE TAREAS</span><h2>Tablero</h2></div>
+      <label className="board-project-filter">Filtrar por proyecto<select aria-label="Filtrar Kanban por proyecto" value={projectFilter} onChange={e=>setProjectFilter(e.target.value)}><option value="ALL">Todos los proyectos</option>{projects.map(project=><option value={project.id} key={project.id}>{project.name}</option>)}</select></label>
       <div className="board-actions">
         <div className="view-toggle" role="group" aria-label="Vista del tablero">
           <button type="button" className={view==='kanban'?'active':''} aria-pressed={view==='kanban'} onClick={()=>setView('kanban')}><LayoutGrid size={16}/> Kanban</button>
           <button type="button" className={view==='table'?'active':''} aria-pressed={view==='table'} onClick={()=>setView('table')}><List size={16}/> Tabla</button>
         </div>
-        <button type="button" className="secondary board-refresh" onClick={()=>void load()} disabled={loadingTasks}><RotateCw size={16}/><span>{loadingTasks?'Cargando…':'Actualizar'}</span></button>
-        <Link className="primary" to="/new"><Plus/> Nueva tarea</Link>
+        <button type="button" className="secondary board-refresh" aria-label="Actualizar tareas" title="Actualizar tareas" onClick={()=>void load()} disabled={loadingTasks}><RotateCw size={16}/></button>
       </div>
     </div>
     {err&&<div className="error">{err}</div>}
     {loadingTasks&&!tasks.length&&<div className="panel loading board-loading">Cargando tareas…</div>}
-    <div className="kanban-toolbar">
-      <label>Filtrar por proyecto<select aria-label="Filtrar Kanban por proyecto" value={projectFilter} onChange={e=>setProjectFilter(e.target.value)}><option value="ALL">Todos los proyectos</option>{projects.map(project=><option value={project.id} key={project.id}>{project.name}</option>)}</select></label>
-    </div>
     <div className="kanban">{statuses.map(([s,label])=>{const items=tasks.filter(t=>t.status===s&&(projectFilter==='ALL'||(t.projects||[]).some(project=>String(project.id)===projectFilter)));return <section className={`col ${s} ${dragging?'drop-ready':''}`} key={s} onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault(); const id=Number(e.dataTransfer.getData('text/task-id')); if(id) dropTask(id,s)}}><h3><span></span>{label}<em>{items.length}</em></h3>{items.map(t=><TaskCard key={t.id} task={t} onDragStart={()=>setDragging(t.id)}/>)}</section>})}</div>
     <div className={`mobile-task-table-wrap ${view==='table'?'desktop-table-view':''}`}>
       <div className="table-toolbar">
