@@ -169,3 +169,10 @@ input,select,textarea,button{font-size:16px!important}
 .project-edit-heading button:disabled{opacity:.65;cursor:wait}
 .project-save-success{margin:10px 0 0;color:#11814f;font-size:13px;font-weight:700}
 @media (max-width:900px){.project-edit-heading{align-items:stretch;flex-direction:column}.project-edit-heading button{width:100%}}
+.attachment-file-icon{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:var(--blue);font-size:10px;font-weight:800}
+.attachment-upload{display:flex;align-items:center;gap:12px;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:14px;margin-top:12px}
+.attachment-upload label{font-weight:800}
+.attachment-upload input{max-width:100%;flex:1;min-width:180px}
+.attachment-upload button{display:inline-flex;align-items:center;gap:7px}
+.attachment-upload .error{flex-basis:100%;margin:0}
+@media (max-width:900px){.attachment-upload{align-items:stretch;flex-direction:column}.attachment-upload input{min-width:0}.attachment-upload button{justify-content:center}}
