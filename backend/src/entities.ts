@@ -62,7 +62,7 @@ export class TaskComment {
   @PrimaryGeneratedColumn() id!: number;
   @ManyToOne(() => Task, (task) => task.comments, { onDelete: 'CASCADE' }) task!: Task;
   @ManyToOne(() => User, { eager: true }) user!: User;
-  @Column({ type: 'text' }) content!: string;
+  @Column({ type: 'longtext' }) content!: string;
   @CreateDateColumn({ name: 'created_at' }) createdAt!: Date;
   @UpdateDateColumn({ name: 'updated_at' }) updatedAt!: Date;
 }

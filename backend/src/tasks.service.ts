@@ -145,8 +145,12 @@ export class TasksService {
 
   async addComment(id: number, dto: CommentDto, user: User) {
     const task = await this.one(id);
-    const comment = await this.comments.save(this.comments.create({ task, user, content: dto.content.trim() }));
-    await this.mail.taskEvent(await this.one(id), 'Nuevo comentario', `${user.name} agregó un comentario.`, comment.content);
+    const content = this.sanitize(dto.content.trim());
+    const textContent = content.replace(/<[^>]*>/g, '').replace(/&nbsp;|&#160;/gi, ' ').trim();
+    if (!textContent && !/<img\b/i.test(content)) throw new BadRequestException('El comentario no puede estar vacío.');
+    const comment = await this.comments.save(this.comments.create({ task, user, content }));
+    const mailContent = content.replace(/<br\s*\/?\s*>|<\/p>|<\/li>/gi, '\n').replace(/<[^>]*>/g, ' ').replace(/&nbsp;|&#160;/gi, ' ').trim();
+    await this.mail.taskEvent(await this.one(id), 'Nuevo comentario', `${user.name} agregó un comentario.`, mailContent);
     return comment;
   }
 
