@@ -28,7 +28,6 @@ export class TasksService {
   constructor(
     @InjectRepository(User) private readonly users: Repository<User>,
     @InjectRepository(Task) private readonly tasks: Repository<Task>,
-    @InjectRepository(Project) private readonly projects: Repository<Project>,
     @InjectRepository(TaskComment) private readonly comments: Repository<TaskComment>,
     @InjectRepository(TaskAttachment) private readonly attachments: Repository<TaskAttachment>,
     @InjectRepository(TaskStatusHistory) private readonly history: Repository<TaskStatusHistory>,
@@ -43,7 +42,7 @@ export class TasksService {
     return title.trim().replace(/\p{L}/u, letter => letter.toUpperCase());
   }
 
-  private async resolveProjects(projectNames?: string) {
+  private async resolveProjects(projectNames: string | undefined, user: User) {
     if (!projectNames) return [];
     let parsed: unknown;
     try {
@@ -67,27 +66,14 @@ export class TasksService {
     const names = [...namesByKey.values()];
     if (!names.length) return [];
 
-    const existing = await this.projects.find({ where: names.map((name) => ({ name })) });
-    const existingKeys = new Set(existing.map((project) =>
-      project.name.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase(),
-    ));
-    const missingNames = [...namesByKey.entries()]
-      .filter(([key]) => !existingKeys.has(key))
-      .map(([, name]) => name);
-
-    if (missingNames.length) {
-      const values = missingNames.map(() => '(?)').join(', ');
-      await this.projects.query(
-        `INSERT IGNORE INTO \`projects\` (\`name\`) VALUES ${values}`,
-        missingNames,
-      );
-    }
-
-    const saved = await this.projects.find({ where: names.map((name) => ({ name })) });
-    const byName = new Map(saved.map((project) => [
+    const byName = new Map((user.projects || []).map((project) => [
       project.name.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase(),
       project,
     ]));
+    const unassigned = names.filter((name) => !byName.has(name.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase()));
+    if (unassigned.length) {
+      throw new BadRequestException(`No tienes asignado${unassigned.length > 1 ? 's' : ''} el proyecto: ${unassigned.join(', ')}`);
+    }
     return [...namesByKey.keys()].map((key) => byName.get(key)).filter((project): project is Project => Boolean(project));
   }
 
@@ -117,7 +103,7 @@ export class TasksService {
       createdBy: user,
       assignedTo,
       status: TaskStatus.TODO,
-      projects: await this.resolveProjects(dto.projectNames),
+      projects: await this.resolveProjects(dto.projectNames, user),
     }));
     await this.history.save(this.history.create({ task, previousStatus: null, newStatus: TaskStatus.TODO, changedBy: user }));
     await this.saveFiles(task, user, files);
@@ -135,7 +121,7 @@ export class TasksService {
     }
     if (dto.title) task.title = this.normalizeTitle(dto.title);
     if (dto.detailHtml) task.detailHtml = this.sanitize(dto.detailHtml);
-    if (dto.projectNames !== undefined) task.projects = await this.resolveProjects(dto.projectNames);
+    if (dto.projectNames !== undefined) task.projects = await this.resolveProjects(dto.projectNames, user);
     const saved = await this.tasks.save(task);
     if (previousAssigned !== saved.assignedTo.email) {
       await this.mail.taskEvent(await this.one(id), 'Tarea reasignada', `${user.name} reasignó la tarea.`);

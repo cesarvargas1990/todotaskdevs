@@ -15,6 +15,13 @@ export class User {
   @Column({ name: 'password_hash' }) passwordHash!: string;
   @CreateDateColumn({ name: 'created_at' }) createdAt!: Date;
   @UpdateDateColumn({ name: 'updated_at' }) updatedAt!: Date;
+  @ManyToMany(() => Project, { eager: true })
+  @JoinTable({
+    name: 'user_projects',
+    joinColumn: { name: 'user_id', referencedColumnName: 'id' },
+    inverseJoinColumn: { name: 'project_id', referencedColumnName: 'id' },
+  })
+  projects!: Project[];
 }
 
 @Entity('tasks')
@@ -46,6 +53,7 @@ export class Project {
   @PrimaryGeneratedColumn() id!: number;
   @Column({ length: 100 }) name!: string;
   @ManyToMany(() => Task, (task) => task.projects) tasks!: Task[];
+  @ManyToMany(() => User, (user) => user.projects) users!: User[];
   @CreateDateColumn({ name: 'created_at' }) createdAt!: Date;
 }
 

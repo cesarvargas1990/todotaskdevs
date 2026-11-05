@@ -13,10 +13,29 @@ import { ProjectsController } from './projects.controller';
 import { TasksService } from './tasks.service';
 
 class SeedService implements OnApplicationBootstrap {
-  constructor(@InjectRepository(User) private readonly users: Repository<User>) {}
+  constructor(
+    @InjectRepository(User) private readonly users: Repository<User>,
+    @InjectRepository(Project) private readonly projects: Repository<Project>,
+  ) {}
 
   async onApplicationBootstrap() {
-    await this.users.count();
+    const users = await this.users.find();
+    const projects = await this.projects.find();
+    const assignments = await this.users.manager.query('SELECT COUNT(*) AS count FROM `user_projects`');
+    if (Number(assignments[0]?.count || 0) === 0 && users.length && projects.length) {
+      for (const user of users) {
+        user.projects = projects;
+        await this.users.save(user);
+      }
+    }
+
+    const normalize = (value: string) => value.normalize('NFD').replace(/\p{Diacritic}/gu, '').trim().toLowerCase();
+    const visualMaster = users.find((user) => normalize(user.name) === 'visual master sas');
+    const requested = new Set(['visualtech', 'vsm erp']);
+    if (visualMaster) {
+      visualMaster.projects = projects.filter((project) => requested.has(normalize(project.name)));
+      await this.users.save(visualMaster);
+    }
   }
 }
 

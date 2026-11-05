@@ -12,7 +12,13 @@ import { User } from './entities';
 export type AuthRequest = Request & { user: User };
 
 export function safeUser(user: User) {
-  return { id: user.id, name: user.name, email: user.email, createdAt: user.createdAt };
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    createdAt: user.createdAt,
+    projects: (user.projects || []).map(({ id, name }) => ({ id, name })),
+  };
 }
 
 @Injectable()

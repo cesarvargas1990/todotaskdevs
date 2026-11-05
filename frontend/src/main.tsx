@@ -6,7 +6,7 @@ import { ArrowDown, ArrowLeft, ArrowUp, ArrowUpDown, Calendar, CheckSquare, Chev
 import './styles.css';
 
 const API = import.meta.env.VITE_API_BASE_URL || '/todotaskdev/api';
-type UserT = { id:number; name:string; email:string };
+type UserT = { id:number; name:string; email:string; projects?:ProjectT[] };
 type Status = 'TODO'|'IN_PROGRESS'|'BLOCKED'|'DONE';
 type TaskSortKey = 'title'|'projects'|'status'|'assignee'|'date';
 type Task = { id:number; title:string; detailHtml:string; status:Status; createdBy:UserT; assignedTo:UserT; projects?:ProjectT[]; createdAt:string; updatedAt:string; comments?:any[]; attachments?:any[]; history?:any[] };
@@ -75,13 +75,14 @@ function Shell({children}:{children:React.ReactNode}){
 }
 
 function Board(){
-  const [tasks,setTasks]=useState<Task[]>([]), [err,setErr]=useState(''), [dragging,setDragging]=useState<number|null>(null), [blockMove,setBlockMove]=useState<{taskId:number;comment:string}|null>(null), [view,setView]=useState<'kanban'|'table'>(()=>localStorage.getItem('todotasks-board-view')==='table'?'table':'kanban');
+  const [tasks,setTasks]=useState<Task[]>([]), [assignedProjects,setAssignedProjects]=useState<ProjectT[]>([]), [err,setErr]=useState(''), [dragging,setDragging]=useState<number|null>(null), [blockMove,setBlockMove]=useState<{taskId:number;comment:string}|null>(null), [view,setView]=useState<'kanban'|'table'>(()=>localStorage.getItem('todotasks-board-view')==='table'?'table':'kanban');
   const [search,setSearch]=useState(''), [statusFilter,setStatusFilter]=useState<Status|'ALL'>('ALL'), [assigneeFilter,setAssigneeFilter]=useState('ALL'), [projectFilter,setProjectFilter]=useState('ALL'), [sortBy,setSortBy]=useState<TaskSortKey>('date'), [sortDirection,setSortDirection]=useState<'asc'|'desc'>('desc'), [page,setPage]=useState(1), [pageSize,setPageSize]=useState(10);
   const load=()=>api('/tasks').then(setTasks).catch((ex:any)=>setErr(ex.message));
   useEffect(()=>{void load()},[]);
+  useEffect(()=>{api('/projects').then(setAssignedProjects).catch((ex:any)=>setErr(ex.message))},[]);
   useEffect(()=>{localStorage.setItem('todotasks-board-view',view)},[view]);
   const assignees=useMemo(()=>Array.from(new Map(tasks.filter(t=>t.assignedTo).map(t=>[t.assignedTo.id,t.assignedTo])).values()).sort((a,b)=>a.name.localeCompare(b.name)),[tasks]);
-  const projects=useMemo(()=>Array.from(new Map(tasks.flatMap(t=>t.projects||[]).map(project=>[project.id,project])).values()).sort((a,b)=>a.name.localeCompare(b.name)),[tasks]);
+  const projects=assignedProjects;
   const filteredTasks=useMemo(()=>{
     const term=search.trim().toLocaleLowerCase();
     const matches=tasks.filter(t=>{
@@ -168,27 +169,25 @@ function ProjectPicker({value,onChange}:{value:string[];onChange:(projects:strin
   },[search]);
   const query=search.trim();
   const sameName=(a:string,b:string)=>a.localeCompare(b,undefined,{sensitivity:'base'})===0;
-  const exactOption=options.find(project=>sameName(project.name,query));
-  const canCreate=Boolean(query)&&!value.some(name=>sameName(name,query))&&!exactOption;
+  const exactOption=query?options.find(project=>sameName(project.name,query)):undefined;
   function add(name:string){if(!value.some(project=>sameName(project,name)))onChange([...value,name]);setSearch('');setOpen(true)}
   function remove(name:string){onChange(value.filter(project=>!sameName(project,name)))}
   return <div className="project-picker" onBlur={e=>{if(!e.currentTarget.contains(e.relatedTarget as Node|null))setOpen(false)}}>
     <div className="project-picker-control" onClick={()=>setOpen(true)}>
       {value.map(name=><span className="project-selection" key={name}>{name}<button type="button" aria-label={`Quitar proyecto ${name}`} onClick={()=>remove(name)}>×</button></span>)}
-      <input role="combobox" aria-label="Buscar o crear proyectos" aria-expanded={open} aria-autocomplete="list" value={search} onFocus={()=>setOpen(true)} onChange={e=>{setSearch(e.target.value);setOpen(true)}} onKeyDown={e=>{
-        if(e.key==='Enter'&&query){e.preventDefault();e.stopPropagation();add(exactOption?.name||query)}
+      <input role="combobox" aria-label="Buscar proyectos asignados" aria-expanded={open} aria-autocomplete="list" value={search} onFocus={()=>setOpen(true)} onChange={e=>{setSearch(e.target.value);setOpen(true)}} onKeyDown={e=>{
+        if(e.key==='Enter'&&query){e.preventDefault();e.stopPropagation();if(exactOption)add(exactOption.name)}
         if(e.key==='Backspace'&&!search&&value.length){e.preventDefault();remove(value[value.length-1])}
         if(e.key==='Escape')setOpen(false);
-      }} placeholder={value.length?'Agregar otro proyecto…':'Buscar o crear un proyecto…'}/>
+      }} placeholder={value.length?'Agregar otro proyecto…':'Buscar proyectos asignados…'}/>
     </div>
     {open&&<div className="project-options" role="listbox">
       {loading&&<div className="project-option-message">Buscando proyectos…</div>}
       {!loading&&options.filter(project=>!value.some(name=>sameName(name,project.name))).map(project=><button type="button" role="option" aria-selected="false" className="project-option" key={project.id} onMouseDown={e=>e.preventDefault()} onClick={()=>add(project.name)}>{project.name}</button>)}
-      {!loading&&canCreate&&<button type="button" role="option" aria-selected="false" className="project-option create-project-option" onMouseDown={e=>e.preventDefault()} onClick={()=>add(query)}><Plus size={16}/> Crear proyecto “{query}”</button>}
-      {!loading&&!options.length&&!canCreate&&<div className="project-option-message">No hay proyectos que coincidan.</div>}
+      {!loading&&!options.length&&<div className="project-option-message">No hay proyectos asignados que coincidan.</div>}
       {error&&<div className="project-option-error">{error}</div>}
     </div>}
-    <small className="project-picker-help">Busca proyectos existentes o escribe un nombre y pulsa Enter para crear uno.</small>
+    <small className="project-picker-help">Solo puedes seleccionar proyectos asignados a tu usuario.</small>
   </div>
 }
 
