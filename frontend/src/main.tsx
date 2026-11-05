@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Link, Navigate, Route, Routes, useNavigate, useParams } from 'react-router-dom';
 import DOMPurify from 'dompurify';
-import { ArrowDown, ArrowLeft, ArrowUp, ArrowUpDown, Calendar, CheckSquare, ChevronLeft, ChevronRight, FileDown, LayoutGrid, List, LogOut, Menu, MessageCircle, Paperclip, Plus, Save, Share2, User, X } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowUp, ArrowUpDown, Calendar, CheckSquare, ChevronLeft, ChevronRight, FileDown, LayoutGrid, List, LogOut, Menu, MessageCircle, Paperclip, Plus, RotateCw, Save, Share2, User, X } from 'lucide-react';
 import './styles.css';
 
 const API = import.meta.env.VITE_API_BASE_URL || '/todotaskdev/api';
@@ -81,9 +81,9 @@ function Shell({children}:{children:React.ReactNode}){
 }
 
 function Board(){
-  const [tasks,setTasks]=useState<Task[]>([]), [assignedProjects,setAssignedProjects]=useState<ProjectT[]>([]), [err,setErr]=useState(''), [dragging,setDragging]=useState<number|null>(null), [blockMove,setBlockMove]=useState<{taskId:number;comment:string}|null>(null), [view,setView]=useState<'kanban'|'table'>(()=>localStorage.getItem('todotasks-board-view')==='table'?'table':'kanban');
+  const [tasks,setTasks]=useState<Task[]>([]), [assignedProjects,setAssignedProjects]=useState<ProjectT[]>([]), [err,setErr]=useState(''), [loadingTasks,setLoadingTasks]=useState(true), [dragging,setDragging]=useState<number|null>(null), [blockMove,setBlockMove]=useState<{taskId:number;comment:string}|null>(null), [view,setView]=useState<'kanban'|'table'>(()=>localStorage.getItem('todotasks-board-view')==='table'?'table':'kanban');
   const [search,setSearch]=useState(''), [statusFilter,setStatusFilter]=useState<Status|'ALL'>('ALL'), [assigneeFilter,setAssigneeFilter]=useState('ALL'), [projectFilter,setProjectFilter]=useState('ALL'), [sortBy,setSortBy]=useState<TaskSortKey>('date'), [sortDirection,setSortDirection]=useState<'asc'|'desc'>('desc'), [page,setPage]=useState(1), [pageSize,setPageSize]=useState(10);
-  const load=()=>api('/tasks').then(setTasks).catch((ex:any)=>setErr(ex.message));
+  const load=()=>{setLoadingTasks(true);setErr('');api('/tasks').then((items:Task[])=>{if(!Array.isArray(items))throw new Error('La respuesta de tareas no tiene el formato esperado.');setTasks(items)}).catch((ex:any)=>setErr(ex.message||'No se pudieron cargar las tareas')).finally(()=>setLoadingTasks(false))};
   useEffect(()=>{void load()},[]);
   useEffect(()=>{api('/projects').then(setAssignedProjects).catch((ex:any)=>setErr(ex.message))},[]);
   useEffect(()=>{localStorage.setItem('todotasks-board-view',view)},[view]);
@@ -131,10 +131,12 @@ function Board(){
           <button type="button" className={view==='kanban'?'active':''} aria-pressed={view==='kanban'} onClick={()=>setView('kanban')}><LayoutGrid size={16}/> Kanban</button>
           <button type="button" className={view==='table'?'active':''} aria-pressed={view==='table'} onClick={()=>setView('table')}><List size={16}/> Tabla</button>
         </div>
+        <button type="button" className="secondary board-refresh" onClick={()=>void load()} disabled={loadingTasks}><RotateCw size={16}/><span>{loadingTasks?'Cargando…':'Actualizar'}</span></button>
         <Link className="primary" to="/new"><Plus/> Nueva tarea</Link>
       </div>
     </div>
     {err&&<div className="error">{err}</div>}
+    {loadingTasks&&!tasks.length&&<div className="panel loading board-loading">Cargando tareas…</div>}
     <div className="kanban-toolbar">
       <label>Filtrar por proyecto<select aria-label="Filtrar Kanban por proyecto" value={projectFilter} onChange={e=>setProjectFilter(e.target.value)}><option value="ALL">Todos los proyectos</option>{projects.map(project=><option value={project.id} key={project.id}>{project.name}</option>)}</select></label>
     </div>
@@ -149,7 +151,7 @@ function Board(){
       <table className="mobile-task-table"><thead><tr>
         {([['title','Tarea'],['projects','Proyectos'],['status','Estado'],['assignee','Asignada a'],['date','Fecha']] as [TaskSortKey,string][]).map(([column,label])=><th key={column} aria-sort={sortBy===column?(sortDirection==='asc'?'ascending':'descending'):'none'}><button type="button" className="sort-button" onClick={()=>sortTasks(column)}>{label}{sortBy===column?(sortDirection==='asc'?<ArrowUp size={14}/>:<ArrowDown size={14}/>):<ArrowUpDown size={14}/>}</button></th>)}
       </tr></thead><tbody>{pageTasks.map(t=><tr key={t.id}><td><Link to={`/tasks/${t.id}`}><strong>{normalizeTaskTitle(t.title)}</strong><small>TT-{String(t.id).padStart(6,'0')}</small></Link></td><td>{t.projects?.length?<ProjectTags projects={t.projects}/>:<small>Sin proyecto</small>}</td><td><span className={`chip ${t.status}`}>{statuses.find(s=>s[0]===t.status)?.[1]}</span></td><td>{t.assignedTo?.name || 'Sin asignar'}</td><td>{new Date(t.createdAt).toLocaleDateString()}</td></tr>)}</tbody></table>
-      {!filteredTasks.length&&<p className="empty">{tasks.length?'No hay tareas que coincidan con la búsqueda y los filtros.':'No hay tareas para mostrar.'}</p>}
+      {!filteredTasks.length&&<p className="empty">{loadingTasks?'Cargando tareas…':tasks.length?'No hay tareas que coincidan con la búsqueda y los filtros.':'No hay tareas para mostrar.'}</p>}
       <div className="table-pagination">
         <span className="result-count">{filteredTasks.length?`Mostrando ${(currentPage-1)*pageSize+1}–${Math.min(currentPage*pageSize,filteredTasks.length)} de ${filteredTasks.length}`:'0 tareas'}</span>
         <label>Por página<select value={pageSize} onChange={e=>{setPageSize(Number(e.target.value));setPage(1)}}><option value={10}>10</option><option value={25}>25</option><option value={50}>50</option></select></label>
