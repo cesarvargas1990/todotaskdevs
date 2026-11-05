@@ -14,6 +14,7 @@
 html,body,#root{min-height:100%;overscroll-behavior:none;touch-action:manipulation}
 input,select,textarea,button{font-size:16px!important}
 .comment{border:1px solid var(--line);border-radius:10px;background:#fbfdff;padding:14px;margin:12px 0}.comment-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;color:var(--muted);font-size:13px}.comment-heading b{color:#0a1640}.comment-content{overflow-wrap:anywhere}.comment-content p:first-child{margin-top:8px}.comment-content p:last-child{margin-bottom:0}.comment-content blockquote{border-left:3px solid #9bb4e6;margin:12px 0;padding:4px 12px;color:#41557f}.comment-composer{border-top:1px solid var(--line);padding-top:16px;margin-top:18px}.comment-composer h4{margin:0 0 10px}.comment-composer .editor{margin-bottom:12px}.comment-composer .tinymce-editor textarea{min-height:220px}.comment-composer>button{margin-left:auto}
+.legacy-comment-text{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.55}
 @media (max-width:900px){
   body{overflow-x:hidden}
   .app{display:block!important}
