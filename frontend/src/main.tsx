@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { BrowserRouter, Link, Navigate, Route, Routes, useNavigate, useParams } from 'react-router-dom';
+import { BrowserRouter, Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
 import DOMPurify from 'dompurify';
 import { ArrowDown, ArrowLeft, ArrowUp, ArrowUpDown, Calendar, CheckSquare, ChevronLeft, ChevronRight, FileDown, LayoutGrid, List, LogOut, Menu, MessageCircle, Paperclip, Plus, RotateCw, Save, Share2, User, X } from 'lucide-react';
 import './styles.css';
@@ -12,6 +12,8 @@ type TaskSortKey = 'title'|'projects'|'status'|'assignee'|'date';
 type Task = { id:number; title:string; detailHtml:string; status:Status; createdBy:UserT; assignedTo:UserT; projects?:ProjectT[]; createdAt:string; updatedAt:string; comments?:any[]; attachments?:any[]; history?:any[] };
 type ProjectT = { id:number; name:string };
 const statuses: [Status,string][] = [['TODO','TODO'],['IN_PROGRESS','En proceso'],['BLOCKED','Bloqueada'],['DONE','Finalizada']];
+type BoardView = 'kanban'|'table';
+const BoardViewContext = createContext<{view:BoardView;setView:(view:BoardView)=>void}|null>(null);
 const imageTypes = new Set(['image/png','image/jpeg','image/webp','image/gif']);
 function normalizeTaskTitle(title:string){return title.trim().replace(/\p{L}/u,letter=>letter.toLocaleUpperCase());}
 function commentHtml(content:string){
@@ -60,8 +62,9 @@ function Login(){
 }
 
 function Shell({children}:{children:React.ReactNode}){
-  const [me,setMe]=useState<UserT|null>(null); const [menuOpen,setMenuOpen]=useState(false); const nav=useNavigate();
+  const [me,setMe]=useState<UserT|null>(null); const [menuOpen,setMenuOpen]=useState(false); const [view,setView]=useState<BoardView>(()=>localStorage.getItem('todotasks-board-view')==='table'?'table':'kanban'); const nav=useNavigate(); const location=useLocation();
   useEffect(()=>{api('/auth/me').then(setMe).catch(()=>nav('/login'))},[]);
+  function chooseView(next:BoardView){setView(next);localStorage.setItem('todotasks-board-view',next)}
   function out(){localStorage.removeItem('token'); nav('/login')}
   return <div className="app">
     <aside className={`side ${menuOpen?'side-open':''}`}>
@@ -73,15 +76,16 @@ function Shell({children}:{children:React.ReactNode}){
     {menuOpen&&<button type="button" className="side-backdrop" aria-label="Cerrar menú" onClick={()=>setMenuOpen(false)}/>} 
     <header>
       <button type="button" className="menu-toggle" aria-label={menuOpen ? 'Cerrar menú' : 'Abrir menú'} aria-expanded={menuOpen} onClick={()=>setMenuOpen((open)=>!open)}>{menuOpen?<X/>:<Menu/>}<span>{menuOpen?'Cerrar menú':'Menú'}</span></button>
-      <nav><Link to="/"><LayoutGrid/> Tablero</Link><Link to="/new"><Plus/> Crear tarea</Link></nav>
+      <nav>{location.pathname==='/'?<div className="view-toggle header-view-toggle" role="group" aria-label="Vista del tablero"><button type="button" className={view==='kanban'?'active':''} aria-pressed={view==='kanban'} onClick={()=>chooseView('kanban')}><LayoutGrid size={16}/> Kanban</button><button type="button" className={view==='table'?'active':''} aria-pressed={view==='table'} onClick={()=>chooseView('table')}><List size={16}/> Tabla</button></div>:<Link to="/"><LayoutGrid/> Tablero</Link>}<Link to="/new"><Plus/> Crear tarea</Link></nav>
       <div className="profile"><span>{me?.name?.slice(0,2) || 'CV'}</span><b>{me?.name}</b></div>
     </header>
-    <main className="content">{children}</main>
+    <BoardViewContext.Provider value={{view,setView:chooseView}}><main className="content">{children}</main></BoardViewContext.Provider>
   </div>
 }
 
 function Board(){
-  const [tasks,setTasks]=useState<Task[]>([]), [assignedProjects,setAssignedProjects]=useState<ProjectT[]>([]), [err,setErr]=useState(''), [loadingTasks,setLoadingTasks]=useState(true), [dragging,setDragging]=useState<number|null>(null), [blockMove,setBlockMove]=useState<{taskId:number;comment:string}|null>(null), [view,setView]=useState<'kanban'|'table'>(()=>localStorage.getItem('todotasks-board-view')==='table'?'table':'kanban');
+  const boardView=useContext(BoardViewContext); const [localView,setLocalView]=useState<BoardView>(()=>localStorage.getItem('todotasks-board-view')==='table'?'table':'kanban'); const view=boardView?.view??localView; const setView=boardView?.setView??setLocalView;
+  const [tasks,setTasks]=useState<Task[]>([]), [assignedProjects,setAssignedProjects]=useState<ProjectT[]>([]), [err,setErr]=useState(''), [loadingTasks,setLoadingTasks]=useState(true), [dragging,setDragging]=useState<number|null>(null), [blockMove,setBlockMove]=useState<{taskId:number;comment:string}|null>(null);
   const [search,setSearch]=useState(''), [statusFilter,setStatusFilter]=useState<Status|'ALL'>('ALL'), [assigneeFilter,setAssigneeFilter]=useState('ALL'), [projectFilter,setProjectFilter]=useState('ALL'), [sortBy,setSortBy]=useState<TaskSortKey>('date'), [sortDirection,setSortDirection]=useState<'asc'|'desc'>('desc'), [page,setPage]=useState(1), [pageSize,setPageSize]=useState(10);
   const load=()=>{setLoadingTasks(true);setErr('');api('/tasks').then((items:Task[])=>{if(!Array.isArray(items))throw new Error('La respuesta de tareas no tiene el formato esperado.');setTasks(items)}).catch((ex:any)=>setErr(ex.message||'No se pudieron cargar las tareas')).finally(()=>setLoadingTasks(false))};
   useEffect(()=>{void load()},[]);
@@ -128,10 +132,6 @@ function Board(){
       <div className="board-heading"><span className="eyebrow">GESTIÓN DE TAREAS</span><h2>Tablero</h2></div>
       <label className="board-project-filter">Filtrar por proyecto<select aria-label="Filtrar Kanban por proyecto" value={projectFilter} onChange={e=>setProjectFilter(e.target.value)}><option value="ALL">Todos los proyectos</option>{projects.map(project=><option value={project.id} key={project.id}>{project.name}</option>)}</select></label>
       <div className="board-actions">
-        <div className="view-toggle" role="group" aria-label="Vista del tablero">
-          <button type="button" className={view==='kanban'?'active':''} aria-pressed={view==='kanban'} onClick={()=>setView('kanban')}><LayoutGrid size={16}/> Kanban</button>
-          <button type="button" className={view==='table'?'active':''} aria-pressed={view==='table'} onClick={()=>setView('table')}><List size={16}/> Tabla</button>
-        </div>
         <button type="button" className="secondary board-refresh" aria-label="Actualizar tareas" title="Actualizar tareas" onClick={()=>void load()} disabled={loadingTasks}><RotateCw size={16}/></button>
       </div>
     </div>
