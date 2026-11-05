@@ -14,6 +14,8 @@ type ProjectT = { id:number; name:string };
 const statuses: [Status,string][] = [['TODO','TODO'],['IN_PROGRESS','En proceso'],['BLOCKED','Bloqueada'],['DONE','Finalizada']];
 type BoardView = 'kanban'|'table';
 const BoardViewContext = createContext<{view:BoardView;setView:(view:BoardView)=>void}|null>(null);
+const BoardHeaderContext = createContext<(content:React.ReactNode)=>void>(()=>{});
+const BoardRefreshContext = createContext<(content:React.ReactNode)=>void>(()=>{});
 const imageTypes = new Set(['image/png','image/jpeg','image/webp','image/gif']);
 function normalizeTaskTitle(title:string){return title.trim().replace(/\p{L}/u,letter=>letter.toLocaleUpperCase());}
 function commentHtml(content:string){
@@ -62,7 +64,7 @@ function Login(){
 }
 
 function Shell({children}:{children:React.ReactNode}){
-  const [me,setMe]=useState<UserT|null>(null); const [menuOpen,setMenuOpen]=useState(false); const [view,setView]=useState<BoardView>(()=>localStorage.getItem('todotasks-board-view')==='table'?'table':'kanban'); const nav=useNavigate(); const location=useLocation();
+  const [me,setMe]=useState<UserT|null>(null); const [menuOpen,setMenuOpen]=useState(false); const [view,setView]=useState<BoardView>(()=>localStorage.getItem('todotasks-board-view')==='table'?'table':'kanban'); const [boardHeader,setBoardHeader]=useState<React.ReactNode>(null); const [boardRefresh,setBoardRefresh]=useState<React.ReactNode>(null); const nav=useNavigate(); const location=useLocation();
   useEffect(()=>{api('/auth/me').then(setMe).catch(()=>nav('/login'))},[]);
   function chooseView(next:BoardView){setView(next);localStorage.setItem('todotasks-board-view',next)}
   function out(){localStorage.removeItem('token'); nav('/login')}
@@ -76,15 +78,17 @@ function Shell({children}:{children:React.ReactNode}){
     {menuOpen&&<button type="button" className="side-backdrop" aria-label="Cerrar menú" onClick={()=>setMenuOpen(false)}/>} 
     <header>
       <button type="button" className="menu-toggle" aria-label={menuOpen ? 'Cerrar menú' : 'Abrir menú'} aria-expanded={menuOpen} onClick={()=>setMenuOpen((open)=>!open)}>{menuOpen?<X/>:<Menu/>}<span>{menuOpen?'Cerrar menú':'Menú'}</span></button>
+      {location.pathname==='/'&&boardHeader}
       <nav>{location.pathname==='/'?<div className="view-toggle header-view-toggle" role="group" aria-label="Vista del tablero"><button type="button" className={view==='kanban'?'active':''} aria-pressed={view==='kanban'} onClick={()=>chooseView('kanban')}><LayoutGrid size={16}/> Kanban</button><button type="button" className={view==='table'?'active':''} aria-pressed={view==='table'} onClick={()=>chooseView('table')}><List size={16}/> Tabla</button></div>:<Link to="/"><LayoutGrid/> Tablero</Link>}<Link to="/new"><Plus/> Crear tarea</Link></nav>
+      {location.pathname==='/'&&boardRefresh}
       <div className="profile"><span>{me?.name?.slice(0,2) || 'CV'}</span><b>{me?.name}</b></div>
     </header>
-    <BoardViewContext.Provider value={{view,setView:chooseView}}><main className="content">{children}</main></BoardViewContext.Provider>
+    <BoardViewContext.Provider value={{view,setView:chooseView}}><BoardHeaderContext.Provider value={setBoardHeader}><BoardRefreshContext.Provider value={setBoardRefresh}><main className="content">{children}</main></BoardRefreshContext.Provider></BoardHeaderContext.Provider></BoardViewContext.Provider>
   </div>
 }
 
 function Board(){
-  const boardView=useContext(BoardViewContext); const [localView,setLocalView]=useState<BoardView>(()=>localStorage.getItem('todotasks-board-view')==='table'?'table':'kanban'); const view=boardView?.view??localView; const setView=boardView?.setView??setLocalView;
+  const boardView=useContext(BoardViewContext); const setBoardHeader=useContext(BoardHeaderContext); const setBoardRefresh=useContext(BoardRefreshContext); const [localView,setLocalView]=useState<BoardView>(()=>localStorage.getItem('todotasks-board-view')==='table'?'table':'kanban'); const view=boardView?.view??localView; const setView=boardView?.setView??setLocalView;
   const [tasks,setTasks]=useState<Task[]>([]), [assignedProjects,setAssignedProjects]=useState<ProjectT[]>([]), [err,setErr]=useState(''), [loadingTasks,setLoadingTasks]=useState(true), [dragging,setDragging]=useState<number|null>(null), [blockMove,setBlockMove]=useState<{taskId:number;comment:string}|null>(null);
   const [search,setSearch]=useState(''), [statusFilter,setStatusFilter]=useState<Status|'ALL'>('ALL'), [assigneeFilter,setAssigneeFilter]=useState('ALL'), [projectFilter,setProjectFilter]=useState('ALL'), [sortBy,setSortBy]=useState<TaskSortKey>('date'), [sortDirection,setSortDirection]=useState<'asc'|'desc'>('desc'), [page,setPage]=useState(1), [pageSize,setPageSize]=useState(10);
   const load=()=>{setLoadingTasks(true);setErr('');api('/tasks').then((items:Task[])=>{if(!Array.isArray(items))throw new Error('La respuesta de tareas no tiene el formato esperado.');setTasks(items)}).catch((ex:any)=>setErr(ex.message||'No se pudieron cargar las tareas')).finally(()=>setLoadingTasks(false))};
@@ -93,6 +97,7 @@ function Board(){
   useEffect(()=>{localStorage.setItem('todotasks-board-view',view)},[view]);
   const assignees=useMemo(()=>Array.from(new Map(tasks.filter(t=>t.assignedTo).map(t=>[t.assignedTo.id,t.assignedTo])).values()).sort((a,b)=>a.name.localeCompare(b.name)),[tasks]);
   const projects=assignedProjects;
+  useEffect(()=>{setBoardHeader(<div className={`header-board-controls ${view==='table'?'table-mode':''}`}><div className="board-heading"><span className="eyebrow">GESTIÓN DE TAREAS</span><h2>Tablero</h2></div>{view==='kanban'&&<label className="board-project-filter">Filtrar por proyecto<select aria-label="Filtrar Kanban por proyecto" value={projectFilter} onChange={e=>setProjectFilter(e.target.value)}><option value="ALL">Todos los proyectos</option>{projects.map(project=><option value={project.id} key={project.id}>{project.name}</option>)}</select></label>}</div>);setBoardRefresh(<button type="button" className="secondary board-refresh" aria-label="Actualizar tareas" title="Actualizar tareas" onClick={()=>void load()} disabled={loadingTasks}><RotateCw size={16}/></button>)},[setBoardHeader,setBoardRefresh,view,projectFilter,projects,loadingTasks]);
   const filteredTasks=useMemo(()=>{
     const term=search.trim().toLocaleLowerCase();
     const matches=tasks.filter(t=>{
@@ -128,13 +133,6 @@ function Board(){
   }
   function dropTask(taskId:number,status:Status){if(status==='BLOCKED') setBlockMove({taskId,comment:''}); else void moveTask(taskId,status)}
   return <section className={`board-page ${view==='table'?'table-view':''}`}>
-    <div className="topline">
-      <div className="board-heading"><span className="eyebrow">GESTIÓN DE TAREAS</span><h2>Tablero</h2></div>
-      <label className="board-project-filter">Filtrar por proyecto<select aria-label="Filtrar Kanban por proyecto" value={projectFilter} onChange={e=>setProjectFilter(e.target.value)}><option value="ALL">Todos los proyectos</option>{projects.map(project=><option value={project.id} key={project.id}>{project.name}</option>)}</select></label>
-      <div className="board-actions">
-        <button type="button" className="secondary board-refresh" aria-label="Actualizar tareas" title="Actualizar tareas" onClick={()=>void load()} disabled={loadingTasks}><RotateCw size={16}/></button>
-      </div>
-    </div>
     {err&&<div className="error">{err}</div>}
     {loadingTasks&&!tasks.length&&<div className="panel loading board-loading">Cargando tareas…</div>}
     <div className="kanban">{statuses.map(([s,label])=>{const items=tasks.filter(t=>t.status===s&&(projectFilter==='ALL'||(t.projects||[]).some(project=>String(project.id)===projectFilter)));return <section className={`col ${s} ${dragging?'drop-ready':''}`} key={s} onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault(); const id=Number(e.dataTransfer.getData('text/task-id')); if(id) dropTask(id,s)}}><h3><span></span>{label}<em>{items.length}</em></h3>{items.map(t=><TaskCard key={t.id} task={t} onDragStart={()=>setDragging(t.id)}/>)}</section>})}</div>
