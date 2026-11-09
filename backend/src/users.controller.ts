@@ -1,7 +1,7 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Req } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { UseJwt, safeUser } from './auth';
+import { AuthRequest, UseJwt, safeUser } from './auth';
 import { User } from './entities';
 
 @UseJwt()
@@ -10,7 +10,11 @@ export class UsersController {
   constructor(@InjectRepository(User) private readonly users: Repository<User>) {}
 
   @Get()
-  async list() {
-    return (await this.users.find({ order: { name: 'ASC' } })).map(safeUser);
+  async list(@Req() req: AuthRequest) {
+    const projectIds = new Set((req.user.projects || []).map((project) => project.id));
+    const users = await this.users.find({ order: { name: 'ASC' } });
+    return users
+      .filter((user) => user.id === req.user.id || (user.projects || []).some((project) => projectIds.has(project.id)))
+      .map(safeUser);
   }
 }
