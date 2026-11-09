@@ -15,6 +15,9 @@ export class UsersController {
     const users = await this.users.find({ order: { name: 'ASC' } });
     return users
       .filter((user) => user.id === req.user.id || (user.projects || []).some((project) => projectIds.has(project.id)))
-      .map(safeUser);
+      .map((user) => {
+        const visibleUser = safeUser(user);
+        return { ...visibleUser, projects: visibleUser.projects.filter((project) => projectIds.has(project.id)) };
+      });
   }
 }
