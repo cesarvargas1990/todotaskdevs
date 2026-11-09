@@ -18,13 +18,13 @@ export class TasksController {
   ) {}
 
   @Get('tasks')
-  list() {
-    return this.service.list();
+  list(@Req() req: AuthRequest) {
+    return this.service.list(req.user);
   }
 
   @Get('tasks/:id')
-  one(@Param('id') id: string) {
-    return this.service.one(Number(id));
+  one(@Param('id') id: string, @Req() req: AuthRequest) {
+    return this.service.one(Number(id), req.user);
   }
 
   @Post('tasks')
@@ -44,8 +44,8 @@ export class TasksController {
   }
 
   @Get('tasks/:id/comments')
-  async comments(@Param('id') id: string) {
-    return (await this.service.one(Number(id))).comments || [];
+  async comments(@Param('id') id: string, @Req() req: AuthRequest) {
+    return (await this.service.one(Number(id), req.user)).comments || [];
   }
 
   @Post('tasks/:id/comments')
@@ -56,9 +56,9 @@ export class TasksController {
   @Post('tasks/:id/attachments')
   @UseInterceptors(FilesInterceptor('attachments'))
   async addAttachments(@Param('id') id: string, @Req() req: AuthRequest, @UploadedFiles() files: Express.Multer.File[]) {
-    const task = await this.service.one(Number(id));
+    const task = await this.service.one(Number(id), req.user);
     await this.service.saveFiles(task, req.user, files);
-    return this.service.one(Number(id));
+    return this.service.one(Number(id), req.user);
   }
 
   @Get('attachments/:id/download')

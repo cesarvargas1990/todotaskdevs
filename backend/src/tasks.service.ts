@@ -77,11 +77,23 @@ export class TasksService {
     return [...namesByKey.keys()].map((key) => byName.get(key)).filter((project): project is Project => Boolean(project));
   }
 
-  async list() {
-    return this.tasks.find({ relations: { comments: true, attachments: true }, order: { updatedAt: 'DESC' } });
+  async list(user: User) {
+    const allowedProjectIds = new Set((user.projects || []).map((project) => project.id));
+    if (!allowedProjectIds.size) return [];
+
+    const tasks = await this.tasks.find({
+      relations: { comments: true, attachments: true },
+      order: { updatedAt: 'DESC' },
+    });
+    return tasks
+      .filter((task) => (task.projects || []).some((project) => allowedProjectIds.has(project.id)))
+      .map((task) => ({
+        ...task,
+        projects: (task.projects || []).filter((project) => allowedProjectIds.has(project.id)),
+      }));
   }
 
-  async one(id: number) {
+  async one(id: number, user?: User) {
     const task = await this.tasks.findOne({
       where: { id },
       relations: {
@@ -91,6 +103,11 @@ export class TasksService {
       },
     });
     if (!task) throw new NotFoundException('Tarea no encontrada');
+    if (user) {
+      const allowedProjectIds = new Set((user.projects || []).map((project) => project.id));
+      task.projects = (task.projects || []).filter((project) => allowedProjectIds.has(project.id));
+      if (!task.projects.length) throw new NotFoundException('Tarea no encontrada');
+    }
     return task;
   }
 
@@ -112,7 +129,7 @@ export class TasksService {
   }
 
   async update(id: number, dto: UpdateTaskDto, user: User) {
-    const task = await this.one(id);
+    const task = await this.one(id, user);
     const previousAssigned = task.assignedTo.email;
     if (dto.assignedToId) {
       const assignedTo = await this.users.findOneBy({ id: dto.assignedToId });
@@ -126,11 +143,11 @@ export class TasksService {
     if (previousAssigned !== saved.assignedTo.email) {
       await this.mail.taskEvent(await this.one(id), 'Tarea reasignada', `${user.name} reasignó la tarea.`);
     }
-    return this.one(id);
+    return this.one(id, user);
   }
 
   async changeStatus(id: number, dto: ChangeStatusDto, user: User) {
-    const task = await this.one(id);
+    const task = await this.one(id, user);
     if (dto.status === TaskStatus.BLOCKED && !dto.comment?.trim()) {
       throw new BadRequestException('Para bloquear una tarea debes indicar el motivo.');
     }
@@ -140,11 +157,11 @@ export class TasksService {
     const saved = await this.tasks.save(task);
     await this.history.save(this.history.create({ task: saved, previousStatus: previous, newStatus: dto.status, changedBy: user, comment: dto.comment || null }));
     await this.mail.taskEvent(await this.one(id), dto.status === TaskStatus.DONE ? 'Tarea finalizada' : 'Cambio de estado', `${user.name} cambió el estado de la tarea.`, dto.comment);
-    return this.one(id);
+    return this.one(id, user);
   }
 
   async addComment(id: number, dto: CommentDto, user: User) {
-    const task = await this.one(id);
+    const task = await this.one(id, user);
     const content = this.sanitize(dto.content.trim());
     const textContent = content.replace(/<[^>]*>/g, '').replace(/&nbsp;|&#160;/gi, ' ').trim();
     if (!textContent && !/<img\b/i.test(content)) throw new BadRequestException('El comentario no puede estar vacío.');
