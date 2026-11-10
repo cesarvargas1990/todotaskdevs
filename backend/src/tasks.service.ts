@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import * as createDOMPurify from 'dompurify';
 import { JSDOM } from 'jsdom';
 import { existsSync, mkdirSync, unlinkSync } from 'fs';
-import { join } from 'path';
+import { extname, join } from 'path';
 import { Repository } from 'typeorm';
 import { v4 as uuid } from 'uuid';
 import { ChangeStatusDto, CommentDto, CreateTaskDto, UpdateTaskDto } from './dto';
@@ -11,17 +11,10 @@ import { Project, Task, TaskAttachment, TaskComment, TaskStatus, TaskStatusHisto
 import { MailService } from './mail.service';
 
 const purifier = createDOMPurify(new JSDOM('').window);
-const allowedMime = new Set([
-  'application/pdf',
-  'application/msword',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/vnd.ms-excel',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'application/vnd.ms-powerpoint',
-  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-  'image/png',
-  'image/jpeg',
+const allowedExtensions = new Set([
+  '.zip', '.rar', '.pdf', '.doc', '.docx', '.xlsx', '.csv', '.md', '.json', '.txt',
 ]);
+const MAX_ATTACHMENT_SIZE = 20 * 1024 * 1024;
 
 @Injectable()
 export class TasksService {
@@ -175,8 +168,12 @@ export class TasksService {
     const uploadDir = process.env.UPLOAD_DIR || join(process.cwd(), 'uploads');
     if (!existsSync(uploadDir)) mkdirSync(uploadDir, { recursive: true });
     for (const file of files) {
-      if (file.size > 10 * 1024 * 1024 || !allowedMime.has(file.mimetype)) {
-        throw new BadRequestException(`Archivo no permitido: ${file.originalname}`);
+      const extension = extname(file.originalname).toLowerCase();
+      if (file.size > MAX_ATTACHMENT_SIZE) {
+        throw new BadRequestException(`El archivo ${file.originalname} supera el límite de 20 MB.`);
+      }
+      if (!allowedExtensions.has(extension) && !file.mimetype.toLowerCase().startsWith('image/')) {
+        throw new BadRequestException(`Tipo de archivo no permitido: ${file.originalname}`);
       }
       const storedName = `${uuid()}-${file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
       await this.attachments.save(this.attachments.create({

@@ -9,6 +9,9 @@ import { ChangeStatusDto, CommentDto, CreateTaskDto, UpdateTaskDto } from './dto
 import { TaskAttachment } from './entities';
 import { TasksService } from './tasks.service';
 
+const MAX_ATTACHMENT_SIZE = 20 * 1024 * 1024;
+const attachmentUpload = FilesInterceptor('attachments', undefined, { limits: { fileSize: MAX_ATTACHMENT_SIZE } });
+
 @UseJwt()
 @Controller()
 export class TasksController {
@@ -28,7 +31,7 @@ export class TasksController {
   }
 
   @Post('tasks')
-  @UseInterceptors(FilesInterceptor('attachments'))
+  @UseInterceptors(attachmentUpload)
   create(@Body() dto: CreateTaskDto, @Req() req: AuthRequest, @UploadedFiles() files: Express.Multer.File[]) {
     return this.service.create(dto, req.user, files);
   }
@@ -54,7 +57,7 @@ export class TasksController {
   }
 
   @Post('tasks/:id/attachments')
-  @UseInterceptors(FilesInterceptor('attachments'))
+  @UseInterceptors(attachmentUpload)
   async addAttachments(@Param('id') id: string, @Req() req: AuthRequest, @UploadedFiles() files: Express.Multer.File[]) {
     const task = await this.service.one(Number(id), req.user);
     await this.service.saveFiles(task, req.user, files);
