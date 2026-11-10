@@ -192,9 +192,10 @@ export class TasksService {
     }
   }
 
-  async deleteAttachment(id: number) {
-    const attachment = await this.attachments.findOneBy({ id });
+  async deleteAttachment(id: number, user: User) {
+    const attachment = await this.attachments.findOne({ where: { id }, relations: { task: true } });
     if (!attachment) throw new NotFoundException('Adjunto no encontrado');
+    await this.one(attachment.task.id, user);
     if (existsSync(attachment.filePath)) unlinkSync(attachment.filePath);
     await this.attachments.delete(id);
     return { ok: true };

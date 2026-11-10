@@ -62,14 +62,16 @@ export class TasksController {
   }
 
   @Get('attachments/:id/download')
-  async download(@Param('id') id: string, @Res() res: Response) {
-    const attachment = await this.attachments.findOneBy({ id: Number(id) });
-    if (!attachment || !existsSync(attachment.filePath)) return res.status(404).json({ message: 'Adjunto no encontrado' });
+  async download(@Param('id') id: string, @Req() req: AuthRequest, @Res() res: Response) {
+    const attachment = await this.attachments.findOne({ where: { id: Number(id) }, relations: { task: true } });
+    if (!attachment) return res.status(404).json({ message: 'Adjunto no encontrado' });
+    await this.service.one(attachment.task.id, req.user);
+    if (!existsSync(attachment.filePath)) return res.status(404).json({ message: 'Adjunto no encontrado' });
     return res.download(attachment.filePath, attachment.originalName);
   }
 
   @Delete('attachments/:id')
-  deleteAttachment(@Param('id') id: string) {
-    return this.service.deleteAttachment(Number(id));
+  deleteAttachment(@Param('id') id: string, @Req() req: AuthRequest) {
+    return this.service.deleteAttachment(Number(id), req.user);
   }
 }
