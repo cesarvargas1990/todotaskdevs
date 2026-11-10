@@ -289,10 +289,14 @@ function TaskForm(){
 }
 
 function AttachmentPreview({att}:{att:any}){
-  const [src,setSrc]=useState('');
+  const [src,setSrc]=useState(''), [isOpen,setIsOpen]=useState(false);
   useEffect(()=>{if(!imageTypes.has(att.mimeType))return; let active=true; fetch(`${API}/attachments/${att.id}/download`,{headers:{Authorization:`Bearer ${token()}`}}).then(r=>r.blob()).then(blob=>{if(!active)return; setSrc(URL.createObjectURL(blob));}); return()=>{active=false; if(src) URL.revokeObjectURL(src)}},[att.id,att.mimeType]);
+  useEffect(()=>{if(!isOpen)return;const onKeyDown=(event:KeyboardEvent)=>{if(event.key==='Escape')setIsOpen(false)};document.addEventListener('keydown',onKeyDown);return()=>document.removeEventListener('keydown',onKeyDown)},[isOpen]);
   if(!imageTypes.has(att.mimeType)) return <div className="attachment-thumb attachment-file-icon"><Paperclip size={25}/><span>{att.mimeType?.split('/').pop()?.toUpperCase()||'ARCHIVO'}</span></div>;
-  return src ? <img className="attachment-thumb" src={src} alt={att.originalName}/> : <div className="attachment-thumb loading-thumb">Cargando imagen...</div>;
+  return <>
+    {src ? <button type="button" className="image-preview-trigger" aria-label={`Ampliar imagen ${att.originalName}`} onClick={()=>setIsOpen(true)}><img className="attachment-thumb" src={src} alt={att.originalName}/></button> : <div className="attachment-thumb loading-thumb">Cargando imagen...</div>}
+    {isOpen&&src&&<div className="image-preview-backdrop" onClick={()=>setIsOpen(false)}><div className="image-preview-modal" role="dialog" aria-modal="true" aria-label={`Vista previa de ${att.originalName}`} onClick={event=>event.stopPropagation()}><button type="button" className="image-preview-close" aria-label="Cerrar vista previa" onClick={()=>setIsOpen(false)}><X size={22}/></button><img src={src} alt={att.originalName}/><p>{att.originalName}</p></div></div>}
+  </>;
 }
 
 function TaskDetail(){
