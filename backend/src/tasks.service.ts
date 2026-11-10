@@ -43,7 +43,7 @@ export class TasksService {
   }
 
   private async resolveProjects(projectNames: string | undefined, user: User) {
-    if (!projectNames) return [];
+    if (!projectNames) throw new BadRequestException('Debes seleccionar al menos un proyecto.');
     let parsed: unknown;
     try {
       parsed = JSON.parse(projectNames);
@@ -64,7 +64,7 @@ export class TasksService {
     }
     if (namesByKey.size > 30) throw new BadRequestException('Puedes asignar hasta 30 proyectos por tarea.');
     const names = [...namesByKey.values()];
-    if (!names.length) return [];
+    if (!names.length) throw new BadRequestException('Debes seleccionar al menos un proyecto.');
 
     const byName = new Map((user.projects || []).map((project) => [
       project.name.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase(),
