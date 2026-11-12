@@ -273,14 +273,14 @@ function TaskForm(){
   const [users,setUsers]=useState<UserT[]>([]), [title,setTitle]=useState(''), [detail,setDetail]=useState(''), [assigned,setAssigned]=useState(''), [files,setFiles]=useState<FileList|null>(null), [projects,setProjects]=useState<string[]>([]), [err,setErr]=useState(''); const nav=useNavigate();
   const previews=useMemo(()=>Array.from(files||[]).map(file=>({file,url:imageTypes.has(file.type)?URL.createObjectURL(file):''})),[files]);
   useEffect(()=>()=>previews.forEach(item=>item.url&&URL.revokeObjectURL(item.url)),[previews]);
-  useEffect(()=>{api('/users').then((u)=>{setUsers(u); setAssigned(String(u[0]?.id||''))})},[]);
+  useEffect(()=>{api('/users').then(setUsers)},[]);
   async function submit(e:React.FormEvent){e.preventDefault(); setErr(''); const oversized=attachmentSizeError(files); if(oversized){setErr(`${oversized} supera el límite de 20 MB.`);return} if(!projects.length){setErr('Debes seleccionar al menos un proyecto.');return} const fd=new FormData(); fd.append('title',normalizeTaskTitle(title)); fd.append('detailHtml',detail); fd.append('assignedToId',assigned); fd.append('projectNames',JSON.stringify(projects)); Array.from(files||[]).forEach(f=>fd.append('attachments',f)); try{const t=await api('/tasks',{method:'POST',body:fd}); nav(`/tasks/${t.id}`)}catch(ex:any){setErr(ex.message)}}
   return <form className="panel form" onSubmit={submit}>
     <h2>Crear tarea</h2>
     <label>Título *<input maxLength={150} required value={title} onChange={e=>setTitle(e.target.value)}/></label>
     <label>Detalle *</label><Editor value={detail} onChange={setDetail}/>
     <label>Proyectos *<ProjectPicker value={projects} onChange={setProjects}/></label>
-    <div className="grid2"><label>Usuario asignado *<select value={assigned} onChange={e=>setAssigned(e.target.value)}>{users.map(u=><option value={u.id} key={u.id}>{u.name}</option>)}</select></label><label>Estado inicial<input disabled value="TODO"/></label></div>
+    <div className="grid2"><label>Usuario asignado *<select required value={assigned} onChange={e=>setAssigned(e.target.value)}><option value="" disabled>Selecciona un usuario</option>{users.map(u=><option value={u.id} key={u.id}>{u.name}</option>)}</select></label><label>Estado inicial<input disabled value="TODO"/></label></div>
     <label>Adjuntos<input type="file" accept={ATTACHMENT_ACCEPT} multiple onChange={e=>setFiles(e.target.files)}/><small>Hasta 20 MB por archivo. ZIP, RAR, PDF, DOC, DOCX, XLSX, CSV, MD, JSON, TXT e imágenes.</small></label>
     {previews.length>0&&<div className="preview-grid">{previews.map(({file,url})=><div className="preview" key={`${file.name}-${file.size}`}>{url?<img src={url} alt={file.name}/>:<Paperclip/>}<b>{file.name}</b><small>{Math.round(file.size/1024)} KB</small></div>)}</div>}
     {err&&<div className="error">{err}</div>}
