@@ -162,17 +162,20 @@ export class TasksService {
     }
     const [comments, attachments, history] = await Promise.all([
       this.comments.createQueryBuilder('comment')
+        .innerJoin('comment.task', 'commentTask')
         .leftJoin('comment.user', 'commentUser')
         .addSelect(['commentUser.id', 'commentUser.name', 'commentUser.email'])
-        .where('comment.task_id = :id', { id }).orderBy('comment.createdAt', 'ASC').getMany(),
+        .where('commentTask.id = :id', { id }).orderBy('comment.createdAt', 'ASC').getMany(),
       this.attachments.createQueryBuilder('attachment')
+        .innerJoin('attachment.task', 'attachmentTask')
         .leftJoin('attachment.uploadedBy', 'uploadedBy')
         .addSelect(['uploadedBy.id', 'uploadedBy.name'])
-        .where('attachment.task_id = :id', { id }).orderBy('attachment.createdAt', 'ASC').getMany(),
+        .where('attachmentTask.id = :id', { id }).orderBy('attachment.createdAt', 'ASC').getMany(),
       this.history.createQueryBuilder('history')
+        .innerJoin('history.task', 'historyTask')
         .leftJoin('history.changedBy', 'changedBy')
         .addSelect(['changedBy.id', 'changedBy.name'])
-        .where('history.task_id = :id', { id }).orderBy('history.createdAt', 'ASC').getMany(),
+        .where('historyTask.id = :id', { id }).orderBy('history.createdAt', 'ASC').getMany(),
     ]);
     task.comments = comments;
     task.attachments = attachments;
