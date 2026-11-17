@@ -16,6 +16,23 @@ const attachmentSizeError = (files: FileList | null) => Array.from(files || []).
 type ProjectT = { id:number; name:string };
 const statuses: [Status,string][] = [['TODO','TODO'],['IN_PROGRESS','En proceso'],['BLOCKED','Bloqueada'],['DONE','Finalizada']];
 type BoardView = 'kanban'|'table';
+type SavedBoardFilters = { search?:string; statusFilter?:Status|'ALL'; assigneeFilter?:string; projectFilter?:string; sortBy?:TaskSortKey; sortDirection?:'asc'|'desc'; page?:number; pageSize?:number };
+const BOARD_FILTERS_KEY = 'todotasks-board-filters';
+function readBoardFilters():SavedBoardFilters{
+  try{
+    const saved=JSON.parse(sessionStorage.getItem(BOARD_FILTERS_KEY)||'{}');
+    return {
+      search:typeof saved.search==='string'?saved.search:'',
+      statusFilter:['ALL','TODO','IN_PROGRESS','BLOCKED','DONE'].includes(saved.statusFilter)?saved.statusFilter:'ALL',
+      assigneeFilter:typeof saved.assigneeFilter==='string'?saved.assigneeFilter:'ALL',
+      projectFilter:typeof saved.projectFilter==='string'?saved.projectFilter:'ALL',
+      sortBy:['title','projects','status','assignee','date'].includes(saved.sortBy)?saved.sortBy:'date',
+      sortDirection:saved.sortDirection==='asc'?'asc':'desc',
+      page:Number.isInteger(saved.page)&&saved.page>0?saved.page:1,
+      pageSize:[10,25,50].includes(saved.pageSize)?saved.pageSize:10,
+    };
+  }catch{return {};}
+}
 const BoardViewContext = createContext<{view:BoardView;setView:(view:BoardView)=>void}|null>(null);
 const BoardHeaderContext = createContext<(content:React.ReactNode)=>void>(()=>{});
 const BoardRefreshContext = createContext<(content:React.ReactNode)=>void>(()=>{});
@@ -37,6 +54,7 @@ async function api(path:string, options:RequestInit={}) {
   const res = await fetch(`${API}${path}`, { ...options, headers });
   if (res.status === 401 && !window.location.pathname.endsWith('/login')) {
     localStorage.removeItem('token');
+    sessionStorage.removeItem(BOARD_FILTERS_KEY);
     window.location.assign(`${import.meta.env.VITE_BASE_PATH || '/todotaskdev/'}login`);
   }
   if (!res.ok) throw new Error((await res.json().catch(()=>({message:'Error'}))).message || 'Error');
@@ -72,7 +90,7 @@ function Shell({children}:{children:React.ReactNode}){
   const [me,setMe]=useState<UserT|null>(null); const [menuOpen,setMenuOpen]=useState(false); const [view,setView]=useState<BoardView>(()=>localStorage.getItem('todotasks-board-view')==='table'?'table':'kanban'); const [boardHeader,setBoardHeader]=useState<React.ReactNode>(null); const [boardRefresh,setBoardRefresh]=useState<React.ReactNode>(null); const nav=useNavigate(); const location=useLocation();
   useEffect(()=>{api('/auth/me').then(setMe).catch(()=>nav('/login'))},[]);
   function chooseView(next:BoardView){setView(next);localStorage.setItem('todotasks-board-view',next)}
-  function out(){localStorage.removeItem('token'); nav('/login')}
+  function out(){localStorage.removeItem('token');sessionStorage.removeItem(BOARD_FILTERS_KEY);nav('/login')}
   return <div className="app">
     <aside className={`side ${menuOpen?'side-open':''}`}>
       <Link className="logo" to="/" onClick={()=>setMenuOpen(false)}><CheckSquare/> Todo<span>Tasks</span></Link>
@@ -96,11 +114,13 @@ function Shell({children}:{children:React.ReactNode}){
 function Board(){
   const boardView=useContext(BoardViewContext); const setBoardHeader=useContext(BoardHeaderContext); const setBoardRefresh=useContext(BoardRefreshContext); const [localView,setLocalView]=useState<BoardView>(()=>localStorage.getItem('todotasks-board-view')==='table'?'table':'kanban'); const view=boardView?.view??localView; const setView=boardView?.setView??setLocalView;
   const [tasks,setTasks]=useState<Task[]>([]), [assignedProjects,setAssignedProjects]=useState<ProjectT[]>([]), [err,setErr]=useState(''), [loadingTasks,setLoadingTasks]=useState(true), [dragging,setDragging]=useState<number|null>(null), [blockMove,setBlockMove]=useState<{taskId:number;comment:string}|null>(null);
-  const [search,setSearch]=useState(''), [statusFilter,setStatusFilter]=useState<Status|'ALL'>('ALL'), [assigneeFilter,setAssigneeFilter]=useState('ALL'), [projectFilter,setProjectFilter]=useState('ALL'), [sortBy,setSortBy]=useState<TaskSortKey>('date'), [sortDirection,setSortDirection]=useState<'asc'|'desc'>('desc'), [page,setPage]=useState(1), [pageSize,setPageSize]=useState(10);
+  const [savedFilters]=useState(readBoardFilters);
+  const [search,setSearch]=useState(savedFilters.search||''), [statusFilter,setStatusFilter]=useState<Status|'ALL'>(savedFilters.statusFilter||'ALL'), [assigneeFilter,setAssigneeFilter]=useState(savedFilters.assigneeFilter||'ALL'), [projectFilter,setProjectFilter]=useState(savedFilters.projectFilter||'ALL'), [sortBy,setSortBy]=useState<TaskSortKey>(savedFilters.sortBy||'date'), [sortDirection,setSortDirection]=useState<'asc'|'desc'>(savedFilters.sortDirection||'desc'), [page,setPage]=useState(savedFilters.page||1), [pageSize,setPageSize]=useState(savedFilters.pageSize||10);
   const load=()=>{setLoadingTasks(true);setErr('');api('/tasks').then((items:Task[])=>{if(!Array.isArray(items))throw new Error('La respuesta de tareas no tiene el formato esperado.');setTasks(items)}).catch((ex:any)=>setErr(ex.message||'No se pudieron cargar las tareas')).finally(()=>setLoadingTasks(false))};
   useEffect(()=>{void load()},[]);
   useEffect(()=>{api('/projects').then(setAssignedProjects).catch((ex:any)=>setErr(ex.message))},[]);
   useEffect(()=>{localStorage.setItem('todotasks-board-view',view)},[view]);
+  useEffect(()=>{sessionStorage.setItem(BOARD_FILTERS_KEY,JSON.stringify({search,statusFilter,assigneeFilter,projectFilter,sortBy,sortDirection,page,pageSize}))},[search,statusFilter,assigneeFilter,projectFilter,sortBy,sortDirection,page,pageSize]);
   const assignees=useMemo(()=>Array.from(new Map(tasks.filter(t=>t.assignedTo).map(t=>[t.assignedTo.id,t.assignedTo])).values()).sort((a,b)=>a.name.localeCompare(b.name)),[tasks]);
   const projects=assignedProjects;
   useEffect(()=>{setBoardHeader(<div className={`header-board-controls ${view==='table'?'table-mode':''}`}><div className="board-heading"><span className="eyebrow">GESTIÓN DE TAREAS</span><h2>Tablero</h2></div>{view==='kanban'&&<label className="board-project-filter">Filtrar por proyecto<select aria-label="Filtrar Kanban por proyecto" value={projectFilter} onChange={e=>setProjectFilter(e.target.value)}><option value="ALL">Todos los proyectos</option>{projects.map(project=><option value={project.id} key={project.id}>{project.name}</option>)}</select></label>}</div>);setBoardRefresh(<button type="button" className="secondary board-refresh" aria-label="Actualizar tareas" title="Actualizar tareas" onClick={()=>void load()} disabled={loadingTasks}><RotateCw size={16}/></button>)},[setBoardHeader,setBoardRefresh,view,projectFilter,projects,loadingTasks]);
