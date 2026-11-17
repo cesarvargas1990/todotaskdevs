@@ -9,6 +9,7 @@ import { v4 as uuid } from 'uuid';
 import { ChangeStatusDto, CommentDto, CreateTaskDto, UpdateTaskDto } from './dto';
 import { Project, Task, TaskAttachment, TaskComment, TaskStatus, TaskStatusHistory, User } from './entities';
 import { MailService } from './mail.service';
+import { assertAdmin } from './auth';
 
 const purifier = createDOMPurify(new JSDOM('').window);
 const allowedExtensions = new Set([
@@ -274,6 +275,18 @@ export class TasksService {
     await this.one(attachment.task.id, user);
     if (existsSync(attachment.filePath)) unlinkSync(attachment.filePath);
     await this.attachments.delete(id);
+    return { ok: true };
+  }
+
+  async deleteTask(id: number, user: User) {
+    assertAdmin(user);
+    const task = await this.tasks.findOneBy({ id });
+    if (!task) throw new NotFoundException('Tarea no encontrada.');
+    const files = await this.attachments.find({ where: { task: { id } } });
+    await this.tasks.delete(id);
+    for (const file of files) {
+      if (existsSync(file.filePath)) unlinkSync(file.filePath);
+    }
     return { ok: true };
   }
 }

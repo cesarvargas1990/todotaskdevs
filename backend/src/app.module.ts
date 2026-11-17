@@ -5,7 +5,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import { AuthController, JwtStrategy } from './auth';
-import { Project, Task, TaskAttachment, TaskComment, TaskStatusHistory, User } from './entities';
+import { Project, Task, TaskAttachment, TaskComment, TaskStatusHistory, User, UserRole } from './entities';
 import { MailService } from './mail.service';
 import { UsersController } from './users.controller';
 import { TasksController } from './tasks.controller';
@@ -35,6 +35,11 @@ class SeedService implements OnApplicationBootstrap {
     if (visualMaster) {
       visualMaster.projects = projects.filter((project) => requested.has(normalize(project.name)));
       await this.users.save(visualMaster);
+    }
+
+    for (const user of users) {
+      const role = user.email.trim().toLowerCase() === 'cesara.vargas1990@gmail.com' ? UserRole.ADMIN : UserRole.USER;
+      if (user.role !== role) await this.users.update(user.id, { role });
     }
   }
 }

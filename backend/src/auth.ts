@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Injectable, Post, Req, UnauthorizedException } from '@nestjs/common';
+import { Body, Controller, ForbiddenException, Get, Injectable, Post, Req, UnauthorizedException } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { JwtService } from '@nestjs/jwt';
 import { PassportStrategy } from '@nestjs/passport';
@@ -7,9 +7,13 @@ import { compare } from 'bcryptjs';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { LoginDto } from './dto';
-import { User } from './entities';
+import { User, UserRole } from './entities';
 
 export type AuthRequest = Request & { user: User };
+
+export function assertAdmin(user: User) {
+  if (user.role !== UserRole.ADMIN) throw new ForbiddenException('Solo el administrador puede realizar esta acción.');
+}
 
 export function safeUser(user: User) {
   return {
@@ -17,6 +21,7 @@ export function safeUser(user: User) {
     name: user.name,
     email: user.email,
     createdAt: user.createdAt,
+    role: user.role,
     projects: (user.projects || []).map(({ id, name }) => ({ id, name })),
   };
 }
@@ -33,7 +38,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
   async validate(payload: { sub: number }) {
     const user = await this.users.findOneBy({ id: payload.sub });
-    if (!user) throw new UnauthorizedException();
+    if (!user || !user.isActive) throw new UnauthorizedException();
     return user;
   }
 }
@@ -56,7 +61,7 @@ export class AuthController {
   @Post('login')
   async login(@Body() dto: LoginDto) {
     const user = await this.users.findOne({ where: { email: dto.email } });
-    if (!user || !(await compare(dto.password, user.passwordHash))) {
+    if (!user || !user.isActive || !(await compare(dto.password, user.passwordHash))) {
       throw new UnauthorizedException('Credenciales inválidas');
     }
     return {

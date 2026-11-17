@@ -30,6 +30,11 @@ export class TasksController {
     return this.service.one(Number(id), req.user);
   }
 
+  @Delete('tasks/:id')
+  deleteTask(@Param('id') id: string, @Req() req: AuthRequest) {
+    return this.service.deleteTask(Number(id), req.user);
+  }
+
   @Post('tasks')
   @UseInterceptors(attachmentUpload)
   create(@Body() dto: CreateTaskDto, @Req() req: AuthRequest, @UploadedFiles() files: Express.Multer.File[]) {
