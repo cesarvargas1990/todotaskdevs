@@ -102,7 +102,7 @@ export class TasksService {
   }
 
   async one(id: number, user?: User) {
-    const task = await this.oneEntity(id, user);
+    const task = await this.oneEntity(id, user, false);
     return {
       id: task.id,
       title: task.title,
@@ -114,10 +114,7 @@ export class TasksService {
       createdAt: task.createdAt,
       updatedAt: task.updatedAt,
       completedAt: task.completedAt,
-      comments: (task.comments || []).map((comment) => ({
-        id: comment.id, content: comment.content, createdAt: comment.createdAt,
-        updatedAt: comment.updatedAt, user: this.publicUser(comment.user),
-      })),
+      commentCount: (task as Task & { commentCount?: number }).commentCount || 0,
       attachments: (task.attachments || []).map((attachment) => ({
         id: attachment.id, originalName: attachment.originalName, mimeType: attachment.mimeType,
         fileSize: attachment.fileSize, createdAt: attachment.createdAt,
@@ -144,15 +141,31 @@ export class TasksService {
       .getExists();
   }
 
-  taskForAttachmentUpload(id: number, user: User) {
-    return this.oneEntity(id, user);
+  async getComments(id: number, user: User) {
+    if (!await this.canAccessTask(id, user)) throw new NotFoundException('Tarea no encontrada');
+    const comments = await this.comments.createQueryBuilder('comment')
+      .innerJoin('comment.task', 'task')
+      .leftJoin('comment.user', 'commentUser')
+      .addSelect(['commentUser.id', 'commentUser.name'])
+      .where('task.id = :id', { id })
+      .orderBy('comment.createdAt', 'ASC')
+      .getMany();
+    return comments.map((comment) => ({
+      id: comment.id, content: comment.content, createdAt: comment.createdAt,
+      updatedAt: comment.updatedAt, user: this.publicUser(comment.user),
+    }));
   }
 
-  private async oneEntity(id: number, user?: User) {
+  taskForAttachmentUpload(id: number, user: User) {
+    return this.oneEntity(id, user, false);
+  }
+
+  private async oneEntity(id: number, user?: User, includeComments = true) {
     const task = await this.tasks.createQueryBuilder('task')
       .leftJoinAndSelect('task.createdBy', 'createdBy')
       .leftJoinAndSelect('task.assignedTo', 'assignedTo')
       .leftJoinAndSelect('task.projects', 'project')
+      .loadRelationCountAndMap('task.commentCount', 'task.comments')
       .where('task.id = :id', { id })
       .getOne();
     if (!task) throw new NotFoundException('Tarea no encontrada');
@@ -162,11 +175,11 @@ export class TasksService {
       if (!task.projects.length) throw new NotFoundException('Tarea no encontrada');
     }
     const [comments, attachments, history] = await Promise.all([
-      this.comments.createQueryBuilder('comment')
+      includeComments ? this.comments.createQueryBuilder('comment')
         .innerJoin('comment.task', 'commentTask')
         .leftJoin('comment.user', 'commentUser')
         .addSelect(['commentUser.id', 'commentUser.name', 'commentUser.email'])
-        .where('commentTask.id = :id', { id }).orderBy('comment.createdAt', 'ASC').getMany(),
+        .where('commentTask.id = :id', { id }).orderBy('comment.createdAt', 'ASC').getMany() : Promise.resolve([] as TaskComment[]),
       this.attachments.createQueryBuilder('attachment')
         .innerJoin('attachment.task', 'attachmentTask')
         .leftJoin('attachment.uploadedBy', 'uploadedBy')

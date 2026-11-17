@@ -52,8 +52,8 @@ export class TasksController {
   }
 
   @Get('tasks/:id/comments')
-  async comments(@Param('id') id: string, @Req() req: AuthRequest) {
-    return (await this.service.one(Number(id), req.user)).comments || [];
+  comments(@Param('id') id: string, @Req() req: AuthRequest) {
+    return this.service.getComments(Number(id), req.user);
   }
 
   @Post('tasks/:id/comments')
