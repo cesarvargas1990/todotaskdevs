@@ -71,36 +71,112 @@ export class TasksService {
   }
 
   async list(user: User) {
-    const allowedProjectIds = new Set((user.projects || []).map((project) => project.id));
-    if (!allowedProjectIds.size) return [];
+    const allowedProjectIds = (user.projects || []).map((project) => project.id);
+    if (!allowedProjectIds.length) return [];
 
-    const tasks = await this.tasks.find({
-      relations: { comments: true, attachments: true },
-      order: { updatedAt: 'DESC' },
-    });
-    return tasks
-      .filter((task) => (task.projects || []).some((project) => allowedProjectIds.has(project.id)))
-      .map((task) => ({
-        ...task,
-        projects: (task.projects || []).filter((project) => allowedProjectIds.has(project.id)),
-      }));
+    const tasks = await this.tasks.createQueryBuilder('task')
+      .leftJoin('task.createdBy', 'createdBy')
+      .addSelect(['createdBy.id', 'createdBy.name'])
+      .leftJoin('task.assignedTo', 'assignedTo')
+      .addSelect(['assignedTo.id', 'assignedTo.name'])
+      .leftJoinAndSelect('task.projects', 'project')
+      .loadRelationCountAndMap('task.commentCount', 'task.comments')
+      .loadRelationCountAndMap('task.attachmentCount', 'task.attachments')
+      .where('project.id IN (:...allowedProjectIds)', { allowedProjectIds })
+      .orderBy('task.updatedAt', 'DESC')
+      .getMany();
+    return tasks.map((task: Task & { commentCount?: number; attachmentCount?: number }) => ({
+      id: task.id,
+      title: task.title,
+      status: task.status,
+      createdBy: this.publicUser(task.createdBy),
+      assignedTo: this.publicUser(task.assignedTo),
+      projects: task.projects.filter((project) => allowedProjectIds.includes(project.id)).map(({ id, name }) => ({ id, name })),
+      createdAt: task.createdAt,
+      updatedAt: task.updatedAt,
+      completedAt: task.completedAt,
+      commentCount: task.commentCount || 0,
+      attachmentCount: task.attachmentCount || 0,
+    }));
   }
 
   async one(id: number, user?: User) {
-    const task = await this.tasks.findOne({
-      where: { id },
-      relations: {
-        comments: { user: true },
-        attachments: { uploadedBy: true },
-        history: { changedBy: true },
-      },
-    });
+    const task = await this.oneEntity(id, user);
+    return {
+      id: task.id,
+      title: task.title,
+      detailHtml: task.detailHtml,
+      status: task.status,
+      createdBy: this.publicUser(task.createdBy),
+      assignedTo: this.publicUser(task.assignedTo),
+      projects: task.projects.map(({ id: projectId, name }) => ({ id: projectId, name })),
+      createdAt: task.createdAt,
+      updatedAt: task.updatedAt,
+      completedAt: task.completedAt,
+      comments: (task.comments || []).map((comment) => ({
+        id: comment.id, content: comment.content, createdAt: comment.createdAt,
+        updatedAt: comment.updatedAt, user: this.publicUser(comment.user),
+      })),
+      attachments: (task.attachments || []).map((attachment) => ({
+        id: attachment.id, originalName: attachment.originalName, mimeType: attachment.mimeType,
+        fileSize: attachment.fileSize, createdAt: attachment.createdAt,
+        uploadedBy: this.publicUser(attachment.uploadedBy),
+      })),
+      history: (task.history || []).map((item) => ({
+        id: item.id, previousStatus: item.previousStatus, newStatus: item.newStatus,
+        comment: item.comment, createdAt: item.createdAt, changedBy: this.publicUser(item.changedBy),
+      })),
+    };
+  }
+
+  private publicUser(user: User) {
+    return user ? { id: user.id, name: user.name } : null;
+  }
+
+  async canAccessTask(id: number, user: User) {
+    const allowedProjectIds = (user.projects || []).map((project) => project.id);
+    if (!allowedProjectIds.length) return false;
+    return this.tasks.createQueryBuilder('task')
+      .innerJoin('task.projects', 'project')
+      .where('task.id = :id', { id })
+      .andWhere('project.id IN (:...allowedProjectIds)', { allowedProjectIds })
+      .getExists();
+  }
+
+  taskForAttachmentUpload(id: number, user: User) {
+    return this.oneEntity(id, user);
+  }
+
+  private async oneEntity(id: number, user?: User) {
+    const task = await this.tasks.createQueryBuilder('task')
+      .leftJoinAndSelect('task.createdBy', 'createdBy')
+      .leftJoinAndSelect('task.assignedTo', 'assignedTo')
+      .leftJoinAndSelect('task.projects', 'project')
+      .where('task.id = :id', { id })
+      .getOne();
     if (!task) throw new NotFoundException('Tarea no encontrada');
     if (user) {
       const allowedProjectIds = new Set((user.projects || []).map((project) => project.id));
       task.projects = (task.projects || []).filter((project) => allowedProjectIds.has(project.id));
       if (!task.projects.length) throw new NotFoundException('Tarea no encontrada');
     }
+    const [comments, attachments, history] = await Promise.all([
+      this.comments.createQueryBuilder('comment')
+        .leftJoin('comment.user', 'commentUser')
+        .addSelect(['commentUser.id', 'commentUser.name', 'commentUser.email'])
+        .where('comment.task_id = :id', { id }).orderBy('comment.createdAt', 'ASC').getMany(),
+      this.attachments.createQueryBuilder('attachment')
+        .leftJoin('attachment.uploadedBy', 'uploadedBy')
+        .addSelect(['uploadedBy.id', 'uploadedBy.name'])
+        .where('attachment.task_id = :id', { id }).orderBy('attachment.createdAt', 'ASC').getMany(),
+      this.history.createQueryBuilder('history')
+        .leftJoin('history.changedBy', 'changedBy')
+        .addSelect(['changedBy.id', 'changedBy.name'])
+        .where('history.task_id = :id', { id }).orderBy('history.createdAt', 'ASC').getMany(),
+    ]);
+    task.comments = comments;
+    task.attachments = attachments;
+    task.history = history;
     return task;
   }
 
@@ -117,13 +193,13 @@ export class TasksService {
     }));
     await this.history.save(this.history.create({ task, previousStatus: null, newStatus: TaskStatus.TODO, changedBy: user }));
     await this.saveFiles(task, user, files);
-    await this.mail.taskEvent(await this.one(task.id), 'Nueva tarea asignada', 'Se creó una tarea en TodoTasks.');
+    await this.mail.taskEvent(await this.oneEntity(task.id), 'Nueva tarea asignada', 'Se creó una tarea en TodoTasks.');
     return this.one(task.id);
   }
 
   async update(id: number, dto: UpdateTaskDto, user: User) {
-    const task = await this.one(id, user);
-    const previousAssigned = task.assignedTo.email;
+    const task = await this.oneEntity(id, user);
+    const previousAssigned = task.assignedTo.id;
     if (dto.assignedToId) {
       const assignedTo = await this.users.findOneBy({ id: dto.assignedToId });
       if (!assignedTo) throw new BadRequestException('Usuario asignado inválido');
@@ -133,14 +209,14 @@ export class TasksService {
     if (dto.detailHtml) task.detailHtml = this.sanitize(dto.detailHtml);
     if (dto.projectNames !== undefined) task.projects = await this.resolveProjects(dto.projectNames, user);
     const saved = await this.tasks.save(task);
-    if (previousAssigned !== saved.assignedTo.email) {
-      await this.mail.taskEvent(await this.one(id), 'Tarea reasignada', `${user.name} reasignó la tarea.`);
+    if (previousAssigned !== saved.assignedTo.id) {
+      await this.mail.taskEvent(await this.oneEntity(id), 'Tarea reasignada', `${user.name} reasignó la tarea.`);
     }
     return this.one(id, user);
   }
 
   async changeStatus(id: number, dto: ChangeStatusDto, user: User) {
-    const task = await this.one(id, user);
+    const task = await this.oneEntity(id, user);
     if (dto.status === TaskStatus.BLOCKED && !dto.comment?.trim()) {
       throw new BadRequestException('Para bloquear una tarea debes indicar el motivo.');
     }
@@ -149,19 +225,19 @@ export class TasksService {
     task.completedAt = dto.status === TaskStatus.DONE ? new Date() : null;
     const saved = await this.tasks.save(task);
     await this.history.save(this.history.create({ task: saved, previousStatus: previous, newStatus: dto.status, changedBy: user, comment: dto.comment || null }));
-    await this.mail.taskEvent(await this.one(id), dto.status === TaskStatus.DONE ? 'Tarea finalizada' : 'Cambio de estado', `${user.name} cambió el estado de la tarea.`, dto.comment);
+    await this.mail.taskEvent(await this.oneEntity(id), dto.status === TaskStatus.DONE ? 'Tarea finalizada' : 'Cambio de estado', `${user.name} cambió el estado de la tarea.`, dto.comment);
     return this.one(id, user);
   }
 
   async addComment(id: number, dto: CommentDto, user: User) {
-    const task = await this.one(id, user);
+    const task = await this.oneEntity(id, user);
     const content = this.sanitize(dto.content.trim());
     const textContent = content.replace(/<[^>]*>/g, '').replace(/&nbsp;|&#160;/gi, ' ').trim();
     if (!textContent && !/<img\b/i.test(content)) throw new BadRequestException('El comentario no puede estar vacío.');
     const comment = await this.comments.save(this.comments.create({ task, user, content }));
     const mailContent = content.replace(/<br\s*\/?\s*>|<\/p>|<\/li>/gi, '\n').replace(/<[^>]*>/g, ' ').replace(/&nbsp;|&#160;/gi, ' ').trim();
-    await this.mail.taskEvent(await this.one(id), 'Nuevo comentario', `${user.name} agregó un comentario.`, mailContent);
-    return comment;
+    await this.mail.taskEvent(await this.oneEntity(id), 'Nuevo comentario', `${user.name} agregó un comentario.`, mailContent);
+    return { id: comment.id, content: comment.content, createdAt: comment.createdAt, updatedAt: comment.updatedAt, user: this.publicUser(user) };
   }
 
   async saveFiles(task: Task, user: User, files: Express.Multer.File[] = []) {

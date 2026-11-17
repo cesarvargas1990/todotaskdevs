@@ -9,7 +9,7 @@ const API = import.meta.env.VITE_API_BASE_URL || '/todotaskdev/api';
 type UserT = { id:number; name:string; email:string; projects?:ProjectT[] };
 type Status = 'TODO'|'IN_PROGRESS'|'BLOCKED'|'DONE';
 type TaskSortKey = 'title'|'projects'|'status'|'assignee'|'date';
-type Task = { id:number; title:string; detailHtml:string; status:Status; createdBy:UserT; assignedTo:UserT; projects?:ProjectT[]; createdAt:string; updatedAt:string; comments?:any[]; attachments?:any[]; history?:any[] };
+type Task = { id:number; title:string; detailHtml:string; status:Status; createdBy:UserT; assignedTo:UserT; projects?:ProjectT[]; createdAt:string; updatedAt:string; comments?:any[]; attachments?:any[]; history?:any[]; commentCount?:number; attachmentCount?:number };
 const MAX_ATTACHMENT_SIZE = 20 * 1024 * 1024;
 const ATTACHMENT_ACCEPT = '.zip,.rar,.pdf,.doc,.docx,.xlsx,.csv,.md,.json,.txt,image/*';
 const attachmentSizeError = (files: FileList | null) => Array.from(files || []).find(file => file.size > MAX_ATTACHMENT_SIZE)?.name;
@@ -161,7 +161,7 @@ function Board(){
 }
 function ProjectTags({projects}:{projects:ProjectT[]}){return <div className="project-tags">{projects.map(project=><span className="project-tag" key={project.id}>{project.name}</span>)}</div>}
 
-function TaskCard({task,onDragStart}:{task:Task;onDragStart:()=>void}){return <Link className="task-card" to={`/tasks/${task.id}`} draggable onDragStart={e=>{e.dataTransfer.setData('text/task-id',String(task.id)); onDragStart();}}><h4>{normalizeTaskTitle(task.title)}</h4><div className={`chip ${task.status}`}>{statuses.find(s=>s[0]===task.status)?.[1]}</div><p>TT-{String(task.id).padStart(6,'0')}</p>{!!task.projects?.length&&<ProjectTags projects={task.projects}/>}<div className="people"><small>Creada por<br/><b>{task.createdBy.name}</b></small><small>Asignada a<br/><b>{task.assignedTo.name}</b></small></div><footer><span><Calendar size={15}/>{new Date(task.createdAt).toLocaleDateString()}</span><span><MessageCircle size={15}/>{task.comments?.length||0}</span><span><Paperclip size={15}/>{task.attachments?.length||0}</span></footer></Link>}
+function TaskCard({task,onDragStart}:{task:Task;onDragStart:()=>void}){return <Link className="task-card" to={`/tasks/${task.id}`} draggable onDragStart={e=>{e.dataTransfer.setData('text/task-id',String(task.id)); onDragStart();}}><h4>{normalizeTaskTitle(task.title)}</h4><div className={`chip ${task.status}`}>{statuses.find(s=>s[0]===task.status)?.[1]}</div><p>TT-{String(task.id).padStart(6,'0')}</p>{!!task.projects?.length&&<ProjectTags projects={task.projects}/>}<div className="people"><small>Creada por<br/><b>{task.createdBy.name}</b></small><small>Asignada a<br/><b>{task.assignedTo.name}</b></small></div><footer><span><Calendar size={15}/>{new Date(task.createdAt).toLocaleDateString()}</span><span><MessageCircle size={15}/>{task.commentCount??task.comments?.length??0}</span><span><Paperclip size={15}/>{task.attachmentCount??task.attachments?.length??0}</span></footer></Link>}
 
 function ProjectPicker({value,onChange}:{value:string[];onChange:(projects:string[])=>void}){
   const [search,setSearch]=useState(''), [options,setOptions]=useState<ProjectT[]>([]), [loading,setLoading]=useState(false), [open,setOpen]=useState(false), [error,setError]=useState('');
@@ -290,11 +290,13 @@ function TaskForm(){
 
 function AttachmentPreview({att}:{att:any}){
   const [src,setSrc]=useState(''), [isOpen,setIsOpen]=useState(false);
-  useEffect(()=>{if(!imageTypes.has(att.mimeType))return; let active=true; fetch(`${API}/attachments/${att.id}/download`,{headers:{Authorization:`Bearer ${token()}`}}).then(r=>r.blob()).then(blob=>{if(!active)return; setSrc(URL.createObjectURL(blob));}); return()=>{active=false; if(src) URL.revokeObjectURL(src)}},[att.id,att.mimeType]);
+  const [loading,setLoading]=useState(false), [error,setError]=useState('');
+  useEffect(()=>()=>{if(src)URL.revokeObjectURL(src)},[src]);
+  async function loadPreview(){if(src||loading)return;setLoading(true);setError('');try{const response=await fetch(`${API}/attachments/${att.id}/download`,{headers:{Authorization:`Bearer ${token()}`}});if(!response.ok)throw new Error('No se pudo cargar la vista previa');setSrc(URL.createObjectURL(await response.blob()))}catch(ex:any){setError(ex.message||'No se pudo cargar la vista previa')}finally{setLoading(false)}}
   useEffect(()=>{if(!isOpen)return;const onKeyDown=(event:KeyboardEvent)=>{if(event.key==='Escape')setIsOpen(false)};document.addEventListener('keydown',onKeyDown);return()=>document.removeEventListener('keydown',onKeyDown)},[isOpen]);
   if(!imageTypes.has(att.mimeType)) return <div className="attachment-thumb attachment-file-icon"><Paperclip size={25}/><span>{att.mimeType?.split('/').pop()?.toUpperCase()||'ARCHIVO'}</span></div>;
   return <>
-    {src ? <button type="button" className="image-preview-trigger" aria-label={`Ampliar imagen ${att.originalName}`} onClick={()=>setIsOpen(true)}><img className="attachment-thumb" src={src} alt={att.originalName}/></button> : <div className="attachment-thumb loading-thumb">Cargando imagen...</div>}
+    {src ? <button type="button" className="image-preview-trigger" aria-label={`Ampliar imagen ${att.originalName}`} onClick={()=>setIsOpen(true)}><img className="attachment-thumb" src={src} alt={att.originalName}/></button> : <button type="button" className="attachment-thumb loading-thumb" onClick={loadPreview} disabled={loading}>{error||(loading?'Cargando imagen…':'Cargar vista previa')}</button>}
     {isOpen&&src&&<div className="image-preview-backdrop" onClick={()=>setIsOpen(false)}><div className="image-preview-modal" role="dialog" aria-modal="true" aria-label={`Vista previa de ${att.originalName}`} onClick={event=>event.stopPropagation()}><button type="button" className="image-preview-close" aria-label="Cerrar vista previa" onClick={()=>setIsOpen(false)}><X size={22}/></button><img src={src} alt={att.originalName}/><p>{att.originalName}</p></div></div>}
   </>;
 }

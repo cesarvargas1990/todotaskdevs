@@ -59,7 +59,7 @@ export class TasksController {
   @Post('tasks/:id/attachments')
   @UseInterceptors(attachmentUpload)
   async addAttachments(@Param('id') id: string, @Req() req: AuthRequest, @UploadedFiles() files: Express.Multer.File[]) {
-    const task = await this.service.one(Number(id), req.user);
+    const task = await this.service.taskForAttachmentUpload(Number(id), req.user);
     await this.service.saveFiles(task, req.user, files);
     return this.service.one(Number(id), req.user);
   }
@@ -68,7 +68,9 @@ export class TasksController {
   async download(@Param('id') id: string, @Req() req: AuthRequest, @Res() res: Response) {
     const attachment = await this.attachments.findOne({ where: { id: Number(id) }, relations: { task: true } });
     if (!attachment) return res.status(404).json({ message: 'Adjunto no encontrado' });
-    await this.service.one(attachment.task.id, req.user);
+    if (!await this.service.canAccessTask(attachment.task.id, req.user)) {
+      return res.status(404).json({ message: 'Adjunto no encontrado' });
+    }
     if (!existsSync(attachment.filePath)) return res.status(404).json({ message: 'Adjunto no encontrado' });
     return res.download(attachment.filePath, attachment.originalName);
   }
