@@ -10,7 +10,8 @@ import { TaskAttachment } from './entities';
 import { TasksService } from './tasks.service';
 
 const MAX_ATTACHMENT_SIZE = 20 * 1024 * 1024;
-const attachmentUpload = FilesInterceptor('attachments', undefined, { limits: { fileSize: MAX_ATTACHMENT_SIZE } });
+const MAX_TEXT_FIELD_SIZE = 50 * 1024 * 1024;
+const attachmentUpload = FilesInterceptor('attachments', undefined, { limits: { fileSize: MAX_ATTACHMENT_SIZE, fieldSize: MAX_TEXT_FIELD_SIZE } });
 
 @UseJwt()
 @Controller()
