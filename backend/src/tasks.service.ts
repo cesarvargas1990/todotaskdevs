@@ -4,6 +4,7 @@ import * as createDOMPurify from 'dompurify';
 import { JSDOM } from 'jsdom';
 import { existsSync, mkdirSync, unlinkSync } from 'fs';
 import { extname, join } from 'path';
+import * as sharp from 'sharp';
 import { Repository } from 'typeorm';
 import { v4 as uuid } from 'uuid';
 import { ChangeStatusDto, CommentDto, CreateTaskDto, UpdateTaskDto } from './dto';
@@ -16,6 +17,10 @@ const allowedExtensions = new Set([
   '.zip', '.rar', '.pdf', '.doc', '.docx', '.xlsx', '.csv', '.md', '.json', '.txt',
 ]);
 const MAX_ATTACHMENT_SIZE = 20 * 1024 * 1024;
+const MAX_IMAGE_WIDTH = 1920;
+const WEBP_QUALITY = 80;
+// GIF (puede ser animado) y SVG se dejan intactos.
+const compressibleImage = /data:image\/(?:png|jpe?g|webp|bmp);base64,([A-Za-z0-9+/=]+)/gi;
 
 @Injectable()
 export class TasksService {
@@ -30,6 +35,27 @@ export class TasksService {
 
   sanitize(html: string) {
     return purifier.sanitize(html, { ADD_TAGS: ['img'], ADD_ATTR: ['src', 'alt', 'style', 'class'] });
+  }
+
+  /** Convierte a WebP (máx. 1920px de ancho) las imágenes base64 incrustadas; conserva la original si no pesa menos. */
+  async optimizeImages(html: string) {
+    const matches = [...html.matchAll(compressibleImage)];
+    if (!matches.length) return html;
+    const replacements = await Promise.all(matches.map(async match => {
+      try {
+        const original = Buffer.from(match[1], 'base64');
+        const webp = await sharp(original).rotate().resize({ width: MAX_IMAGE_WIDTH, withoutEnlargement: true }).webp({ quality: WEBP_QUALITY }).toBuffer();
+        return webp.length < original.length ? `data:image/webp;base64,${webp.toString('base64')}` : match[0];
+      } catch {
+        return match[0];
+      }
+    }));
+    let index = 0;
+    return html.replace(compressibleImage, () => replacements[index++]);
+  }
+
+  private async prepareHtml(html: string) {
+    return this.sanitize(await this.optimizeImages(html));
   }
 
   private normalizeTitle(title: string) {
@@ -202,7 +228,7 @@ export class TasksService {
     if (!assignedTo) throw new BadRequestException('Usuario asignado inválido');
     const task = await this.tasks.save(this.tasks.create({
       title: this.normalizeTitle(dto.title),
-      detailHtml: this.sanitize(dto.detailHtml),
+      detailHtml: await this.prepareHtml(dto.detailHtml),
       createdBy: user,
       assignedTo,
       status: TaskStatus.TODO,
@@ -223,7 +249,7 @@ export class TasksService {
       task.assignedTo = assignedTo;
     }
     if (dto.title) task.title = this.normalizeTitle(dto.title);
-    if (dto.detailHtml) task.detailHtml = this.sanitize(dto.detailHtml);
+    if (dto.detailHtml) task.detailHtml = await this.prepareHtml(dto.detailHtml);
     if (dto.projectNames !== undefined) task.projects = await this.resolveProjects(dto.projectNames, user);
     const saved = await this.tasks.save(task);
     if (previousAssigned !== saved.assignedTo.id) {
@@ -248,7 +274,7 @@ export class TasksService {
 
   async addComment(id: number, dto: CommentDto, user: User) {
     const task = await this.oneEntity(id, user);
-    const content = this.sanitize(dto.content.trim());
+    const content = await this.prepareHtml(dto.content.trim());
     const textContent = content.replace(/<[^>]*>/g, '').replace(/&nbsp;|&#160;/gi, ' ').trim();
     if (!textContent && !/<img\b/i.test(content)) throw new BadRequestException('El comentario no puede estar vacío.');
     const comment = await this.comments.save(this.comments.create({ task, user, content }));
